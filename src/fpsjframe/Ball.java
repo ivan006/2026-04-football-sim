@@ -11,16 +11,19 @@ public class Ball {
     private static final float STOP_THRESH = 0.1f;
     private static final float BOUNCE_DAMP = 0.6f;
 
-    // Pitch boundaries (matches SimPanel drawPitch)
+    // Must match SimPanel.drawPitch exactly
+    // W = FPSJFrame.WIDTH, H = FPSJFrame.HEIGHT - 40
+    private static final float W = FPSJFrame.WIDTH;
+    private static final float H = FPSJFrame.HEIGHT - 40;
     private static final float LEFT = 40f;
-    private static final float RIGHT = FPSJFrame.GRID_COLS * FPSJFrame.TILE_SIZE - 40f;
+    private static final float RIGHT = W - 40f;
     private static final float TOP = 20f;
-    private static final float BOTTOM = FPSJFrame.GRID_ROWS * FPSJFrame.TILE_SIZE - 60f;
+    private static final float BOTTOM = H - 20f;
 
-    // Goal posts on right side
+    // Right goal (matches: drawRect(W-40, H/2-50, 20, 100))
     static final float GOAL_LINE_X = RIGHT;
-    static final float GOAL_TOP_Y = (FPSJFrame.GRID_ROWS / 2f) * FPSJFrame.TILE_SIZE - 50f;
-    static final float GOAL_BOT_Y = (FPSJFrame.GRID_ROWS / 2f) * FPSJFrame.TILE_SIZE + 50f;
+    static final float GOAL_TOP_Y = H / 2f - 50f;
+    static final float GOAL_BOT_Y = H / 2f + 50f;
 
     public boolean loose = false;
 
@@ -29,8 +32,8 @@ public class Ball {
     }
 
     public void reset() {
-        x = (FPSJFrame.GRID_COLS / 2f) * FPSJFrame.TILE_SIZE;
-        y = (FPSJFrame.GRID_ROWS / 2f) * FPSJFrame.TILE_SIZE;
+        x = W / 2f;
+        y = H / 2f;
         vx = 0;
         vy = 0;
         loose = false;
@@ -48,7 +51,6 @@ public class Ball {
     }
 
     /**
-     * Tick ball physics.
      * Returns true if ball crossed the goal line (goal scored).
      */
     public boolean tick() {
@@ -60,7 +62,7 @@ public class Ball {
         vx *= FRICTION;
         vy *= FRICTION;
 
-        // Goal check — must happen before right wall bounce
+        // Goal check before right wall bounce
         if (x >= GOAL_LINE_X && y >= GOAL_TOP_Y && y <= GOAL_BOT_Y) {
             loose = false;
             vx = 0;
@@ -86,7 +88,6 @@ public class Ball {
             vy = -Math.abs(vy) * BOUNCE_DAMP;
         }
 
-        // Stop if slow enough
         if (Math.abs(vx) < STOP_THRESH && Math.abs(vy) < STOP_THRESH) {
             vx = 0;
             vy = 0;

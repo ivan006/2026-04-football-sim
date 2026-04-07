@@ -101,15 +101,12 @@ public class World implements Runnable {
     }
 
     private void tick() {
-        // Tick ball physics first
         boolean goal = ball.tick();
 
         if (goal) {
             player.onGoal();
-        } else if (ball.isStopped() && !player.hasBall && player.getCurrentObjective() == Objective.OBTAIN_BALL) {
-            // ball stopped, player doesn't have it — he'll naturally seek it via
-            // OBTAIN_BALL
         }
+
         player.tick(ball);
         hud.tick(player.score);
     }
