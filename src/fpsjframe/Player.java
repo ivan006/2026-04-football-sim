@@ -16,9 +16,9 @@ public class Player {
     private static final float SPEED_SEEK = 2.5f;
     private static final float SPEED_DRIBBLE = 1.8f;
     private static final float SPEED_RETURN = 2.0f;
-    private static final float SPEED_BALL_RESET = 1.5f;
     private static final float PICKUP_DIST = 18f;
-    private static final float GOAL_DIST = 30f;
+    private static final float PASS_RANGE = 120f; // distance from goal to trigger pass
+    private static final float PASS_POWER = 14f; // initial ball speed on kick
     private static final float ARRIVE_DIST = 10f;
 
     static final float START_X = FPSJFrame.TILE_SIZE * 5;
@@ -30,6 +30,9 @@ public class Player {
 
     public int score = 0;
 
+    // Waiting for ball after pass
+    private boolean waitingForBall = false;
+
     public Player() {
         x = START_X;
         y = START_Y;
@@ -39,6 +42,7 @@ public class Player {
     private void queueNormalCycle() {
         objectiveQueue.add(Objective.OBTAIN_BALL);
         objectiveQueue.add(Objective.ADVANCE_TO_GOAL);
+        objectiveQueue.add(Objective.PASS_TO_GOAL);
     }
 
     private void queueAfterGoal() {
@@ -46,6 +50,7 @@ public class Player {
         objectiveQueue.add(Objective.KICKOFF_RESET);
         objectiveQueue.add(Objective.OBTAIN_BALL);
         objectiveQueue.add(Objective.ADVANCE_TO_GOAL);
+        objectiveQueue.add(Objective.PASS_TO_GOAL);
     }
 
     private void nextObjective() {
@@ -59,12 +64,17 @@ public class Player {
         switch (currentObjective) {
             case OBTAIN_BALL -> obtainBall(ball);
             case ADVANCE_TO_GOAL -> advanceToGoal(ball);
+            case PASS_TO_GOAL -> passToGoal(ball);
             case CARRY_TO_CENTER -> carryToCenter(ball);
             case KICKOFF_RESET -> kickoffReset(ball);
         }
     }
 
     private void obtainBall(Ball ball) {
+        // If ball is in flight, wait for it to stop
+        if (ball.loose)
+            return;
+
         float dx = ball.x - x;
         float dy = ball.y - y;
         float dist = (float) Math.sqrt(dx * dx + dy * dy);
@@ -82,17 +92,53 @@ public class Player {
         float dx = GOAL_X - x;
         float dy = GOAL_Y - y;
         float dist = (float) Math.sqrt(dx * dx + dy * dy);
-        if (dist < GOAL_DIST) {
-            score++;
-            nextObjective();
-            queueAfterGoal();
+
+        // Close enough to pass — hand off to PASS_TO_GOAL
+        if (dist < PASS_RANGE) {
+            nextObjective(); // moves to PASS_TO_GOAL
             return;
         }
+
         angle = (float) Math.atan2(dy, dx);
         x += (dx / dist) * SPEED_DRIBBLE;
         y += (dy / dist) * SPEED_DRIBBLE;
         ball.x = x;
         ball.y = y;
+    }
+
+    private void passToGoal(Ball ball) {
+        if (waitingForBall) {
+            // Ball crossed goal line — World.tick() handles score increment and calls
+            // onGoal()
+            // Just wait; World will call onGoal() on us
+            return;
+        }
+        // Face goal and kick
+        float dx = GOAL_X - x;
+        float dy = GOAL_Y - y;
+        angle = (float) Math.atan2(dy, dx);
+        hasBall = false;
+        ball.kick(GOAL_X, GOAL_Y, PASS_POWER);
+        waitingForBall = true;
+    }
+
+    /** Called by World when the ball crosses the goal line. */
+    public void onGoal() {
+        score++;
+        waitingForBall = false;
+        nextObjective(); // clears PASS_TO_GOAL
+        queueAfterGoal();
+    }
+
+    /** Called by World when the passed ball stopped without scoring. */
+    public void onPassFailed() {
+        waitingForBall = false;
+        // Re-queue obtain + advance + pass
+        objectiveQueue.clear();
+        objectiveQueue.add(Objective.OBTAIN_BALL);
+        objectiveQueue.add(Objective.ADVANCE_TO_GOAL);
+        objectiveQueue.add(Objective.PASS_TO_GOAL);
+        nextObjective();
     }
 
     private void carryToCenter(Ball ball) {
@@ -109,8 +155,8 @@ public class Player {
             return;
         }
         angle = (float) Math.atan2(dy, dx);
-        x += (dx / dist) * SPEED_BALL_RESET;
-        y += (dy / dist) * SPEED_BALL_RESET;
+        x += (dx / dist) * SPEED_DRIBBLE;
+        y += (dy / dist) * SPEED_DRIBBLE;
         ball.x = x;
         ball.y = y;
     }
@@ -139,24 +185,20 @@ public class Player {
         g2.translate((int) x, (int) y);
         g2.rotate(angle - Math.PI / 2);
 
-        // Shadow
         g2.setColor(new Color(0, 0, 0, 60));
         g2.fillOval(-9, -9, 20, 20);
 
-        // Body
         g2.setColor(hasBall ? new Color(80, 180, 255) : new Color(220, 220, 220));
         g2.fillOval(-8, -8, 16, 16);
         g2.setColor(Color.DARK_GRAY);
         g2.setStroke(new BasicStroke(1.2f));
         g2.drawOval(-8, -8, 16, 16);
 
-        // Arms
         g2.setStroke(new BasicStroke(2.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
         g2.setColor(hasBall ? new Color(80, 180, 255) : new Color(200, 200, 200));
         g2.drawLine(-8, -2, -18, 4);
         g2.drawLine(8, -2, 18, 4);
 
-        // Ball at feet when dribbling
         if (hasBall) {
             g2.setColor(Color.WHITE);
             g2.fillOval(-5, 14, 10, 10);

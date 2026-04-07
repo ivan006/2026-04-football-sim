@@ -1,26 +1,85 @@
 package fpsjframe;
 
-public class Ball {
-    public float x, y;
+import java.awt.*;
 
-    private static final int COLS = FPSJFrame.GRID_COLS;
-    private static final int ROWS = FPSJFrame.GRID_ROWS;
-    private static final int TS = FPSJFrame.TILE_SIZE;
+public class Ball {
+
+    public float x, y;
+    public float vx, vy;
+
+    private static final float FRICTION = 0.97f;
+    private static final float STOP_THRESH = 0.1f;
+
+    // Right goal line x
+    static final float GOAL_LINE_X = FPSJFrame.GRID_COLS * FPSJFrame.TILE_SIZE - 40f;
+    static final float GOAL_TOP_Y = (FPSJFrame.GRID_ROWS / 2f) * FPSJFrame.TILE_SIZE - 50f;
+    static final float GOAL_BOT_Y = (FPSJFrame.GRID_ROWS / 2f) * FPSJFrame.TILE_SIZE + 50f;
+
+    public boolean loose = false; // true when ball is in free flight (passed/kicked)
 
     public Ball() {
         reset();
     }
 
     public void reset() {
-        x = (COLS / 2) * TS + TS / 2f;
-        y = (ROWS / 2) * TS + TS / 2f;
+        x = (FPSJFrame.GRID_COLS / 2f) * FPSJFrame.TILE_SIZE;
+        y = (FPSJFrame.GRID_ROWS / 2f) * FPSJFrame.TILE_SIZE;
+        vx = 0;
+        vy = 0;
+        loose = false;
     }
 
-    public void draw(java.awt.Graphics2D g) {
+    /**
+     * Kick the ball toward a target at a given power (pixels/tick initial speed).
+     */
+    public void kick(float targetX, float targetY, float power) {
+        float dx = targetX - x;
+        float dy = targetY - y;
+        float dist = (float) Math.sqrt(dx * dx + dy * dy);
+        if (dist == 0)
+            return;
+        vx = (dx / dist) * power;
+        vy = (dy / dist) * power;
+        loose = true;
+    }
+
+    /**
+     * Tick ball physics. Returns true if ball crossed the goal line (goal scored).
+     */
+    public boolean tick() {
+        if (!loose)
+            return false;
+
+        x += vx;
+        y += vy;
+        vx *= FRICTION;
+        vy *= FRICTION;
+
+        // Stop if slow enough
+        if (Math.abs(vx) < STOP_THRESH && Math.abs(vy) < STOP_THRESH) {
+            vx = 0;
+            vy = 0;
+            loose = false;
+        }
+
+        // Goal check — crossed right goal line within post height
+        if (x >= GOAL_LINE_X && y >= GOAL_TOP_Y && y <= GOAL_BOT_Y) {
+            loose = false;
+            return true;
+        }
+
+        return false;
+    }
+
+    public boolean isStopped() {
+        return !loose && vx == 0 && vy == 0;
+    }
+
+    public void draw(Graphics2D g) {
         int r = 6;
-        g.setColor(java.awt.Color.WHITE);
+        g.setColor(Color.WHITE);
         g.fillOval((int) (x - r), (int) (y - r), r * 2, r * 2);
-        g.setColor(java.awt.Color.DARK_GRAY);
+        g.setColor(Color.DARK_GRAY);
         g.drawOval((int) (x - r), (int) (y - r), r * 2, r * 2);
     }
 }

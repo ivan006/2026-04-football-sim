@@ -13,15 +13,12 @@ public class World implements Runnable {
     private String name;
     private final String createdAt;
 
-    // Config kept for CreateWorldPanel compatibility (repurpose as team stats
-    // later)
     public final int attackPower;
     public final int defensePower;
     public final int movementPower;
     public final int sightRange;
 
     private volatile Status status = Status.PAUSED;
-
     private static final long TICK_NS = 1_000_000_000L / 60;
 
     final Tile[][] grid = new Tile[FPSJFrame.GRID_ROWS][FPSJFrame.GRID_COLS];
@@ -104,11 +101,19 @@ public class World implements Runnable {
     }
 
     private void tick() {
+        // Tick ball physics first
+        boolean goal = ball.tick();
+
+        if (goal) {
+            player.onGoal();
+        } else if (ball.isStopped() && player.getCurrentObjective() == Objective.PASS_TO_GOAL) {
+            player.onPassFailed();
+        }
+
         player.tick(ball);
         hud.tick(player.score);
     }
 
-    // Getters
     public String getId() {
         return id;
     }
@@ -143,7 +148,6 @@ public class World implements Runnable {
         return String.format("%02d:%02d:%02d", h, m, s);
     }
 
-    // Keep for Hud/graph compat
     public int getGrassPopulation() {
         return player.score;
     }
