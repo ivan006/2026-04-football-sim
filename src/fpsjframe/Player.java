@@ -14,16 +14,20 @@ public class Player {
     private Objective currentObjective;
     final Queue<Objective> objectiveQueue = new LinkedList<>();
 
-    // Pass target — set by World after both players created
     public Player passTarget = null;
 
     private static final float SPEED_SEEK = 2.5f;
     private static final float SPEED_DRIBBLE = 1.8f;
     private static final float SPEED_RETURN = 2.0f;
-    private static final float PASS_RANGE = 120f;
     private static final float PASS_POWER = 4f;
     private static final float PICKUP_DIST = 18f;
     private static final float ARRIVE_DIST = 10f;
+    private static final float PASS_RANGE = 120f;
+
+    // Separation
+    private static final float MIN_PASS_DIST = 180f; // must be this far apart to pass
+    private static final float IDEAL_DIST = 220f; // target separation distance
+    private static final float SEP_SPEED = 1.2f;
 
     private static final float W = FPSJFrame.WIDTH;
     private static final float H = FPSJFrame.HEIGHT - 40;
@@ -36,9 +40,7 @@ public class Player {
     static final float BALL_CENTER_X = W / 2f;
     static final float BALL_CENTER_Y = H / 2f;
 
-    // Team colour for rendering
     private final Color bodyColor;
-
     public int score = 0;
 
     public Player(float startX, float startY, Color bodyColor) {
@@ -49,12 +51,14 @@ public class Player {
         y = startY;
     }
 
-    public void setObjective(Objective obj) {
+    public void setObjectives(Objective... objectives) {
         objectiveQueue.clear();
-        objectiveQueue.add(obj);
+        for (Objective o : objectives)
+            objectiveQueue.add(o);
+        currentObjective = null;
     }
 
-    private void nextObjective() {
+    void nextObjective() {
         currentObjective = objectiveQueue.poll();
     }
 
@@ -69,9 +73,11 @@ public class Player {
             return;
         switch (currentObjective) {
             case OBTAIN_BALL -> obtainBall(ball);
+            case GET_READY_TO_PASS -> getReadyToPass();
+            case PASS_TO_FRIEND -> passToFriend(ball);
+            case GET_READY_TO_RECEIVE -> getReadyToReceive();
             case ADVANCE_TO_GOAL -> advanceToGoal(ball);
             case PASS_TO_GOAL -> passToGoal(ball);
-            case PASS_TO_FRIEND -> passToFriend(ball);
             case CARRY_TO_CENTER -> carryToCenter(ball);
             case KICKOFF_RESET -> kickoffReset();
         }
@@ -91,6 +97,62 @@ public class Player {
         angle = (float) Math.atan2(dy, dx);
         x += (dx / dist) * SPEED_SEEK;
         y += (dy / dist) * SPEED_SEEK;
+    }
+
+    private void getReadyToPass() {
+        if (passTarget == null) {
+            nextObjective();
+            return;
+        }
+        float dx = x - passTarget.x;
+        float dy = y - passTarget.y;
+        float dist = (float) Math.sqrt(dx * dx + dy * dy);
+        // face the target while moving
+        angle = (float) Math.atan2(-dy, -dx);
+        if (dist >= MIN_PASS_DIST) {
+            nextObjective(); // far enough — ready to pass
+            return;
+        }
+        // move away from target to gain separation
+        if (dist > 0) {
+            x += (dx / dist) * SEP_SPEED;
+            y += (dy / dist) * SEP_SPEED;
+        }
+        // keep ball glued while repositioning
+        if (hasBall) {
+            // carried silently
+        }
+    }
+
+    private void passToFriend(Ball ball) {
+        if (!hasPassed && passTarget != null) {
+            float dx = passTarget.x - x;
+            float dy = passTarget.y - y;
+            angle = (float) Math.atan2(dy, dx);
+            hasBall = false;
+            ball.kick(passTarget.x, passTarget.y, PASS_POWER);
+            hasPassed = true;
+        }
+    }
+
+    private void getReadyToReceive() {
+        if (passTarget == null) {
+            nextObjective();
+            return;
+        }
+        float dx = x - passTarget.x;
+        float dy = y - passTarget.y;
+        float dist = (float) Math.sqrt(dx * dx + dy * dy);
+        // face the passer
+        angle = (float) Math.atan2(-dy, -dx);
+        if (dist >= MIN_PASS_DIST) {
+            nextObjective(); // in position — wait for ball
+            return;
+        }
+        if (dist > 0) {
+            x += (dx / dist) * SEP_SPEED;
+            y += (dy / dist) * SEP_SPEED;
+        }
     }
 
     private void advanceToGoal(Ball ball) {
@@ -119,26 +181,13 @@ public class Player {
         }
     }
 
-    private void passToFriend(Ball ball) {
-        if (!hasPassed && passTarget != null) {
-            float dx = passTarget.x - x;
-            float dy = passTarget.y - y;
-            angle = (float) Math.atan2(dy, dx);
-            hasBall = false;
-            ball.kick(passTarget.x, passTarget.y, PASS_POWER);
-            hasPassed = true;
-        }
-        // wait — World calls onReceive() on the target when ball arrives
-    }
-
-    /** Called by World when this player's pass reaches the friend. */
     public void onPassComplete() {
         hasPassed = false;
-        // re-queue: wait for ball, then pass again
+        // re-queue pass cycle
         objectiveQueue.clear();
-        objectiveQueue.add(Objective.OBTAIN_BALL);
+        objectiveQueue.add(Objective.GET_READY_TO_PASS);
         objectiveQueue.add(Objective.PASS_TO_FRIEND);
-        nextObjective();
+        currentObjective = null;
     }
 
     public void onGoal(Ball ball) {
@@ -154,7 +203,7 @@ public class Player {
         objectiveQueue.add(Objective.OBTAIN_BALL);
         objectiveQueue.add(Objective.ADVANCE_TO_GOAL);
         objectiveQueue.add(Objective.PASS_TO_GOAL);
-        nextObjective();
+        currentObjective = null;
     }
 
     public void onPassFailed(Ball ball) {
@@ -162,8 +211,9 @@ public class Player {
         hasBall = false;
         objectiveQueue.clear();
         objectiveQueue.add(Objective.OBTAIN_BALL);
+        objectiveQueue.add(Objective.GET_READY_TO_PASS);
         objectiveQueue.add(Objective.PASS_TO_FRIEND);
-        nextObjective();
+        currentObjective = null;
     }
 
     private void carryToCenter(Ball ball) {

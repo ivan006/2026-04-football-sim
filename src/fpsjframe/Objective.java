@@ -2,9 +2,11 @@ package fpsjframe;
 
 public enum Objective {
     OBTAIN_BALL,
-    ADVANCE_TO_GOAL,
-    PASS_TO_GOAL,
+    GET_READY_TO_PASS,
     PASS_TO_FRIEND,
+    GET_READY_TO_RECEIVE,
     CARRY_TO_CENTER,
-    KICKOFF_RESET
+    KICKOFF_RESET,
+    ADVANCE_TO_GOAL,
+    PASS_TO_GOAL
 }

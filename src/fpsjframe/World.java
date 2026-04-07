@@ -22,12 +22,10 @@ public class World implements Runnable {
     private volatile Status status = Status.PAUSED;
     private static final long TICK_NS = 1_000_000_000L / 60;
 
-    private static final float W = FPSJFrame.WIDTH;
     private static final float H = FPSJFrame.HEIGHT - 40;
 
     final Tile[][] grid = new Tile[FPSJFrame.GRID_ROWS][FPSJFrame.GRID_COLS];
 
-    // Two players
     final Player player1 = new Player(FPSJFrame.TILE_SIZE * 5, H / 2f, new Color(80, 180, 255));
     final Player player2 = new Player(FPSJFrame.TILE_SIZE * 15, H / 2f, new Color(255, 140, 80));
 
@@ -50,15 +48,20 @@ public class World implements Runnable {
                 .format(DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm"));
         initGrid();
 
-        // Wire pass targets
         player1.passTarget = player2;
         player2.passTarget = player1;
 
-        // Player 1 starts with ball and passes; player 2 waits to receive
-        player1.setObjective(Objective.OBTAIN_BALL);
-        player1.objectiveQueue.add(Objective.PASS_TO_FRIEND);
-        player2.setObjective(Objective.OBTAIN_BALL);
-        player2.objectiveQueue.add(Objective.PASS_TO_FRIEND);
+        // Player 1 has ball, gets ready then passes
+        // Player 2 gets ready to receive then obtains ball
+        player1.setObjectives(
+                Objective.OBTAIN_BALL,
+                Objective.GET_READY_TO_PASS,
+                Objective.PASS_TO_FRIEND);
+        player2.setObjectives(
+                Objective.GET_READY_TO_RECEIVE,
+                Objective.OBTAIN_BALL,
+                Objective.GET_READY_TO_PASS,
+                Objective.PASS_TO_FRIEND);
     }
 
     private void initGrid() {
@@ -122,21 +125,18 @@ public class World implements Runnable {
         boolean goal = ball.tick();
 
         if (goal) {
-            // figure out who scored (whoever just passed to goal)
-            if (player1.getCurrentObjective() == null && player1.hasPassed)
+            if (player1.hasPassed)
                 player1.onGoal(ball);
             else
                 player2.onGoal(ball);
         } else {
-            // Check if ball reached pass target
             checkPassArrival(player1, player2);
             checkPassArrival(player2, player1);
 
-            // Pass failed — ball stopped, nobody has it
             if (ball.isStopped() && !player1.hasBall && !player2.hasBall) {
                 if (player1.hasPassed)
                     player1.onPassFailed(ball);
-                if (player2.hasPassed)
+                else if (player2.hasPassed)
                     player2.onPassFailed(ball);
             }
         }
@@ -154,7 +154,7 @@ public class World implements Runnable {
         float dx = receiver.x - ball.x;
         float dy = receiver.y - ball.y;
         float dist = (float) Math.sqrt(dx * dx + dy * dy);
-        if (dist < 20f) {
+        if (dist < 24f) {
             ball.vx = 0;
             ball.vy = 0;
             ball.loose = false;
@@ -162,7 +162,7 @@ public class World implements Runnable {
             ball.y = receiver.y;
             passer.hasPassed = false;
             passer.onPassComplete();
-            // receiver picks up naturally via OBTAIN_BALL
+            // receiver's OBTAIN_BALL will pick it up naturally next tick
         }
     }
 
