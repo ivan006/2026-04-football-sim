@@ -106,10 +106,10 @@ public class World implements Runnable {
 
         if (goal) {
             player.onGoal();
-        } else if (ball.isStopped() && player.getCurrentObjective() == Objective.PASS_TO_GOAL) {
-            player.onPassFailed();
+        } else if (ball.isStopped() && !player.hasBall && player.getCurrentObjective() == Objective.OBTAIN_BALL) {
+            // ball stopped, player doesn't have it — he'll naturally seek it via
+            // OBTAIN_BALL
         }
-
         player.tick(ball);
         hud.tick(player.score);
     }
