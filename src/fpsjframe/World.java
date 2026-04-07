@@ -160,9 +160,15 @@ public class World implements Runnable {
             ball.loose = false;
             ball.x = receiver.x;
             ball.y = receiver.y;
+            passer.hasBall = false;
             passer.hasPassed = false;
             passer.onPassComplete();
-            // receiver's OBTAIN_BALL will pick it up naturally next tick
+            // queue the receiver's next cycle
+            receiver.objectiveQueue.clear();
+            receiver.objectiveQueue.add(Objective.OBTAIN_BALL);
+            receiver.objectiveQueue.add(Objective.GET_READY_TO_PASS);
+            receiver.objectiveQueue.add(Objective.PASS_TO_FRIEND);
+            receiver.currentObjective = null;
         }
     }
 

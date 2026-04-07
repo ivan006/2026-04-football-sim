@@ -11,7 +11,7 @@ public class Player {
     public boolean hasBall = false;
     boolean hasPassed = false;
 
-    private Objective currentObjective;
+    Objective currentObjective;
     final Queue<Objective> objectiveQueue = new LinkedList<>();
 
     public Player passTarget = null;
