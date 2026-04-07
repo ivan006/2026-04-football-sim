@@ -23,7 +23,7 @@ public class Player {
     private static final float PICKUP_DIST = 18f;
     private static final float ARRIVE_DIST = 10f;
     private static final float PASS_RANGE = 120f;
-
+    public static Player ballOwner = null;
     // Separation
     private static final float MIN_PASS_DIST = 180f; // must be this far apart to pass
     private static final float IDEAL_DIST = 220f; // target separation distance
@@ -86,11 +86,14 @@ public class Player {
     private void obtainBall(Ball ball) {
         if (ball.loose)
             return;
+        if (ballOwner != null && ballOwner != this)
+            return; // someone else has it
         float dx = ball.x - x;
         float dy = ball.y - y;
         float dist = (float) Math.sqrt(dx * dx + dy * dy);
         if (dist < PICKUP_DIST) {
             hasBall = true;
+            ballOwner = this;
             nextObjective();
             return;
         }
@@ -130,6 +133,7 @@ public class Player {
             float dy = passTarget.y - y;
             angle = (float) Math.atan2(dy, dx);
             hasBall = false;
+            ballOwner = null; // ← here
             ball.kick(passTarget.x, passTarget.y, PASS_POWER);
             hasPassed = true;
         }
@@ -176,6 +180,7 @@ public class Player {
             float dy = GOAL_Y - y;
             angle = (float) Math.atan2(dy, dx);
             hasBall = false;
+            ballOwner = null; // ← here
             ball.kick(GOAL_X, GOAL_Y, PASS_POWER);
             hasPassed = true;
         }
