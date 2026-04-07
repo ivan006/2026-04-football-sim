@@ -30,7 +30,7 @@ public class Player {
     static final float GOAL_Y = H / 2f;
     static final float BALL_CENTER_X = W / 2f;
     static final float BALL_CENTER_Y = H / 2f;
-
+    boolean hasPassed = false;
     public int score = 0;
 
     public Player() {
@@ -104,17 +104,35 @@ public class Player {
     }
 
     private void passToGoal(Ball ball) {
-        float dx = GOAL_X - x;
-        float dy = GOAL_Y - y;
-        angle = (float) Math.atan2(dy, dx);
-        hasBall = false;
-        ball.kick(GOAL_X, GOAL_Y, PASS_POWER);
-        nextObjective(); // move to CARRY_TO_CENTER via onGoal, or OBTAIN_BALL via World
+        if (!hasPassed) {
+            float dx = GOAL_X - x;
+            float dy = GOAL_Y - y;
+            angle = (float) Math.atan2(dy, dx);
+            hasBall = false;
+            ball.kick(GOAL_X, GOAL_Y, PASS_POWER);
+            hasPassed = true;
+        }
+        // wait here — World.tick() calls onGoal() or onPassFailed()
     }
 
-    public void onGoal() {
+    public void onGoal(Ball ball) {
         score++;
+        hasPassed = false;
+        ball.x = GOAL_X - 20f;
+        ball.y = GOAL_Y;
+        ball.vx = 0;
+        ball.vy = 0;
+        ball.loose = false;
         queueAfterGoal();
+        nextObjective();
+    }
+
+    public void onPassFailed() {
+        hasPassed = false;
+        objectiveQueue.add(Objective.OBTAIN_BALL);
+        objectiveQueue.add(Objective.ADVANCE_TO_GOAL);
+        objectiveQueue.add(Objective.PASS_TO_GOAL);
+        nextObjective();
     }
 
     private void carryToCenter(Ball ball) {
