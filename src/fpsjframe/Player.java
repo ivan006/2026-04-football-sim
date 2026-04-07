@@ -58,8 +58,11 @@ public class Player {
     }
 
     public void tick(Ball ball) {
+
         if (currentObjective == null)
             nextObjective();
+        if (currentObjective == null)
+            return; // queue empty, nothing to do
 
         switch (currentObjective) {
             case OBTAIN_BALL -> obtainBall(ball);
