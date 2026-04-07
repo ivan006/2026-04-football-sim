@@ -18,7 +18,7 @@ public class Player {
     private static final float SPEED_DRIBBLE = 1.8f;
     private static final float SPEED_RETURN = 2.0f;
     private static final float PASS_RANGE = 120f;
-    private static final float PASS_POWER = 14f;
+    private static final float PASS_POWER = 4f;
     private static final float PICKUP_DIST = 18f;
     private static final float ARRIVE_DIST = 10f;
 
@@ -38,7 +38,7 @@ public class Player {
         x = START_X;
         y = START_Y;
         enqueueNormalCycle();
-        nextObjective();
+        // do NOT call nextObjective() here
     }
 
     private void enqueueNormalCycle() {
@@ -48,6 +48,7 @@ public class Player {
     }
 
     private void enqueueAfterGoal() {
+        objectiveQueue.add(Objective.OBTAIN_BALL);
         objectiveQueue.add(Objective.CARRY_TO_CENTER);
         objectiveQueue.add(Objective.KICKOFF_RESET);
         enqueueNormalCycle();
@@ -62,6 +63,8 @@ public class Player {
     }
 
     public void tick(Ball ball) {
+        if (currentObjective == null)
+            nextObjective();
         if (currentObjective == null)
             return;
         switch (currentObjective) {
@@ -119,15 +122,11 @@ public class Player {
     public void onGoal(Ball ball) {
         score++;
         hasPassed = false;
-        // place ball just inside pitch at goal mouth so carry looks natural
-        ball.x = GOAL_X - 25f;
-        ball.y = GOAL_Y;
         ball.vx = 0;
         ball.vy = 0;
         ball.loose = false;
-        hasBall = true;
         enqueueAfterGoal();
-        nextObjective(); // moves to CARRY_TO_CENTER
+        nextObjective();
     }
 
     public void onPassFailed(Ball ball) {
