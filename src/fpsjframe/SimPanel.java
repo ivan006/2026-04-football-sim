@@ -17,7 +17,6 @@ public class SimPanel extends JPanel {
     private final JButton pauseBtn;
     private final JButton graphsBtn;
 
-    // Pitch colours
     private static final Color PITCH_DARK = new Color(34, 120, 50);
     private static final Color PITCH_LIGHT = new Color(40, 140, 58);
     private static final Color LINE_COL = new Color(255, 255, 255, 180);
@@ -30,7 +29,6 @@ public class SimPanel extends JPanel {
         setPreferredSize(new Dimension(FPSJFrame.WIDTH, FPSJFrame.HEIGHT));
         setFocusable(true);
 
-        // ---- Top bar ----
         JPanel topBar = new JPanel(new BorderLayout(8, 0));
         topBar.setBorder(BorderFactory.createEmptyBorder(6, 12, 6, 12));
 
@@ -86,7 +84,6 @@ public class SimPanel extends JPanel {
         topBar.add(rightBtns, BorderLayout.EAST);
         add(topBar, BorderLayout.NORTH);
 
-        // ---- Layered pane ----
         JLayeredPane layered = new JLayeredPane() {
             @Override
             public void doLayout() {
@@ -107,7 +104,8 @@ public class SimPanel extends JPanel {
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 drawPitch(g2);
                 world.ball.draw(g2);
-                world.player.draw(g2);
+                world.player1.draw(g2);
+                world.player2.draw(g2);
             }
         };
         canvas.setBackground(PITCH_DARK);
@@ -146,45 +144,26 @@ public class SimPanel extends JPanel {
 
     private void drawPitch(Graphics2D g) {
         int W = FPSJFrame.WIDTH;
-        int H = FPSJFrame.HEIGHT - 40; // minus topbar approx
+        int H = FPSJFrame.HEIGHT - 40;
         int stripeW = W / 10;
-
-        // Alternating green stripes
         for (int i = 0; i < 10; i++) {
             g.setColor(i % 2 == 0 ? PITCH_DARK : PITCH_LIGHT);
             g.fillRect(i * stripeW, 0, stripeW, H);
         }
-
         g.setColor(LINE_COL);
         g.setStroke(new BasicStroke(2f));
-
-        // Border
         g.drawRect(40, 20, W - 80, H - 40);
-
-        // Halfway line
         g.drawLine(W / 2, 20, W / 2, H - 20);
-
-        // Centre circle
         int cr = 60;
         g.drawOval(W / 2 - cr, H / 2 - cr, cr * 2, cr * 2);
-
-        // Centre spot
         g.fillOval(W / 2 - 4, H / 2 - 4, 8, 8);
-
-        // Penalty areas
         int paW = 120, paH = 200;
-        // Left
         g.drawRect(40, H / 2 - paH / 2, paW, paH);
-        // Right
         g.drawRect(W - 40 - paW, H / 2 - paH / 2, paW, paH);
-
-        // Goals
         int gW = 20, gH = 100;
         g.setColor(new Color(255, 255, 255, 220));
         g.setStroke(new BasicStroke(3f));
-        // Left goal
         g.drawRect(20, H / 2 - gH / 2, gW, gH);
-        // Right goal
         g.drawRect(W - 40, H / 2 - gH / 2, gW, gH);
     }
 
@@ -193,8 +172,7 @@ public class SimPanel extends JPanel {
         JLayeredPane layered = (JLayeredPane) modal.getParent();
         if (layered == null)
             return;
-        int pw = layered.getWidth();
-        int ph = layered.getHeight();
+        int pw = layered.getWidth(), ph = layered.getHeight();
         if (pw == 0 || ph == 0)
             return;
         int margin = 40;

@@ -12,7 +12,10 @@ public class Player {
     boolean hasPassed = false;
 
     private Objective currentObjective;
-    private final Queue<Objective> objectiveQueue = new LinkedList<>();
+    final Queue<Objective> objectiveQueue = new LinkedList<>();
+
+    // Pass target — set by World after both players created
+    public Player passTarget = null;
 
     private static final float SPEED_SEEK = 2.5f;
     private static final float SPEED_DRIBBLE = 1.8f;
@@ -25,33 +28,30 @@ public class Player {
     private static final float W = FPSJFrame.WIDTH;
     private static final float H = FPSJFrame.HEIGHT - 40;
 
-    static final float START_X = FPSJFrame.TILE_SIZE * 5;
-    static final float START_Y = H / 2f;
+    final float startX;
+    final float startY;
+
     static final float GOAL_X = W - 40f;
     static final float GOAL_Y = H / 2f;
     static final float BALL_CENTER_X = W / 2f;
     static final float BALL_CENTER_Y = H / 2f;
 
+    // Team colour for rendering
+    private final Color bodyColor;
+
     public int score = 0;
 
-    public Player() {
-        x = START_X;
-        y = START_Y;
-        enqueueNormalCycle();
-        // do NOT call nextObjective() here
+    public Player(float startX, float startY, Color bodyColor) {
+        this.startX = startX;
+        this.startY = startY;
+        this.bodyColor = bodyColor;
+        x = startX;
+        y = startY;
     }
 
-    private void enqueueNormalCycle() {
-        objectiveQueue.add(Objective.OBTAIN_BALL);
-        objectiveQueue.add(Objective.ADVANCE_TO_GOAL);
-        objectiveQueue.add(Objective.PASS_TO_GOAL);
-    }
-
-    private void enqueueAfterGoal() {
-        objectiveQueue.add(Objective.OBTAIN_BALL);
-        objectiveQueue.add(Objective.CARRY_TO_CENTER);
-        objectiveQueue.add(Objective.KICKOFF_RESET);
-        enqueueNormalCycle();
+    public void setObjective(Objective obj) {
+        objectiveQueue.clear();
+        objectiveQueue.add(obj);
     }
 
     private void nextObjective() {
@@ -71,6 +71,7 @@ public class Player {
             case OBTAIN_BALL -> obtainBall(ball);
             case ADVANCE_TO_GOAL -> advanceToGoal(ball);
             case PASS_TO_GOAL -> passToGoal(ball);
+            case PASS_TO_FRIEND -> passToFriend(ball);
             case CARRY_TO_CENTER -> carryToCenter(ball);
             case KICKOFF_RESET -> kickoffReset();
         }
@@ -116,7 +117,28 @@ public class Player {
             ball.kick(GOAL_X, GOAL_Y, PASS_POWER);
             hasPassed = true;
         }
-        // wait — World.tick() calls onGoal() or onPassFailed()
+    }
+
+    private void passToFriend(Ball ball) {
+        if (!hasPassed && passTarget != null) {
+            float dx = passTarget.x - x;
+            float dy = passTarget.y - y;
+            angle = (float) Math.atan2(dy, dx);
+            hasBall = false;
+            ball.kick(passTarget.x, passTarget.y, PASS_POWER);
+            hasPassed = true;
+        }
+        // wait — World calls onReceive() on the target when ball arrives
+    }
+
+    /** Called by World when this player's pass reaches the friend. */
+    public void onPassComplete() {
+        hasPassed = false;
+        // re-queue: wait for ball, then pass again
+        objectiveQueue.clear();
+        objectiveQueue.add(Objective.OBTAIN_BALL);
+        objectiveQueue.add(Objective.PASS_TO_FRIEND);
+        nextObjective();
     }
 
     public void onGoal(Ball ball) {
@@ -125,7 +147,13 @@ public class Player {
         ball.vx = 0;
         ball.vy = 0;
         ball.loose = false;
-        enqueueAfterGoal();
+        objectiveQueue.clear();
+        objectiveQueue.add(Objective.OBTAIN_BALL);
+        objectiveQueue.add(Objective.CARRY_TO_CENTER);
+        objectiveQueue.add(Objective.KICKOFF_RESET);
+        objectiveQueue.add(Objective.OBTAIN_BALL);
+        objectiveQueue.add(Objective.ADVANCE_TO_GOAL);
+        objectiveQueue.add(Objective.PASS_TO_GOAL);
         nextObjective();
     }
 
@@ -133,15 +161,15 @@ public class Player {
         hasPassed = false;
         hasBall = false;
         objectiveQueue.clear();
-        enqueueNormalCycle();
-        nextObjective(); // moves to OBTAIN_BALL
+        objectiveQueue.add(Objective.OBTAIN_BALL);
+        objectiveQueue.add(Objective.PASS_TO_FRIEND);
+        nextObjective();
     }
 
     private void carryToCenter(Ball ball) {
         float dx = BALL_CENTER_X - x;
         float dy = BALL_CENTER_Y - y;
         float dist = (float) Math.sqrt(dx * dx + dy * dy);
-        // always keep ball on player while carrying
         ball.x = x;
         ball.y = y;
         ball.loose = false;
@@ -156,12 +184,12 @@ public class Player {
     }
 
     private void kickoffReset() {
-        float dx = START_X - x;
-        float dy = START_Y - y;
+        float dx = startX - x;
+        float dy = startY - y;
         float dist = (float) Math.sqrt(dx * dx + dy * dy);
         if (dist < ARRIVE_DIST) {
-            x = START_X;
-            y = START_Y;
+            x = startX;
+            y = startY;
             nextObjective();
             return;
         }
@@ -178,14 +206,14 @@ public class Player {
         g2.setColor(new Color(0, 0, 0, 60));
         g2.fillOval(-9, -9, 20, 20);
 
-        g2.setColor(hasBall ? new Color(80, 180, 255) : new Color(220, 220, 220));
+        g2.setColor(hasBall ? bodyColor.brighter() : bodyColor);
         g2.fillOval(-8, -8, 16, 16);
         g2.setColor(Color.DARK_GRAY);
         g2.setStroke(new BasicStroke(1.2f));
         g2.drawOval(-8, -8, 16, 16);
 
         g2.setStroke(new BasicStroke(2.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-        g2.setColor(hasBall ? new Color(80, 180, 255) : new Color(200, 200, 200));
+        g2.setColor(hasBall ? bodyColor.brighter() : bodyColor.darker());
         g2.drawLine(-8, -2, -18, 4);
         g2.drawLine(8, -2, 18, 4);
 
