@@ -9,16 +9,18 @@ public class SimPanel extends JPanel {
     private final World world;
     private final Runnable onExit;
 
-    private int hoverRow = -1;
-    private int hoverCol = -1;
-
     private Timer repaintTimer;
 
     private final JLabel statusLabel;
-    private final JLabel grassLabel;
+    private final JLabel scoreLabel;
     private final JLabel timeLabel;
     private final JButton pauseBtn;
     private final JButton graphsBtn;
+
+    // Pitch colours
+    private static final Color PITCH_DARK = new Color(34, 120, 50);
+    private static final Color PITCH_LIGHT = new Color(40, 140, 58);
+    private static final Color LINE_COL = new Color(255, 255, 255, 180);
 
     public SimPanel(World world, Runnable onExit) {
         this.world = world;
@@ -38,12 +40,12 @@ public class SimPanel extends JPanel {
 
         JPanel centerInfo = new JPanel(new FlowLayout(FlowLayout.CENTER, 20, 0));
         centerInfo.setOpaque(false);
-        grassLabel = new JLabel();
-        grassLabel.setFont(new Font("Monospaced", Font.BOLD, 13));
-        grassLabel.setForeground(new Color(80, 200, 80));
+        scoreLabel = new JLabel();
+        scoreLabel.setFont(new Font("Monospaced", Font.BOLD, 13));
+        scoreLabel.setForeground(new Color(80, 200, 80));
         timeLabel = new JLabel();
         timeLabel.setFont(new Font("Monospaced", Font.PLAIN, 13));
-        centerInfo.add(grassLabel);
+        centerInfo.add(scoreLabel);
         centerInfo.add(timeLabel);
         topBar.add(centerInfo, BorderLayout.CENTER);
 
@@ -84,11 +86,10 @@ public class SimPanel extends JPanel {
         topBar.add(rightBtns, BorderLayout.EAST);
         add(topBar, BorderLayout.NORTH);
 
-        // ---- Layered pane: canvas + modal ----
+        // ---- Layered pane ----
         JLayeredPane layered = new JLayeredPane() {
             @Override
             public void doLayout() {
-                // Canvas fills everything
                 for (Component c : getComponents()) {
                     if (c instanceof GraphModal)
                         continue;
@@ -103,19 +104,13 @@ public class SimPanel extends JPanel {
             protected void paintComponent(Graphics g) {
                 super.paintComponent(g);
                 Graphics2D g2 = (Graphics2D) g;
-                drawGrid(g2);
-                for (Grass grass : world.grassList)
-                    grass.draw(g2, hoverRow, hoverCol);
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                drawPitch(g2);
+                world.ball.draw(g2);
+                world.player.draw(g2);
             }
         };
-        canvas.setBackground(Color.BLACK);
-        canvas.addMouseMotionListener(new MouseMotionAdapter() {
-            @Override
-            public void mouseMoved(MouseEvent e) {
-                hoverRow = e.getY() / FPSJFrame.TILE_SIZE;
-                hoverCol = e.getX() / FPSJFrame.TILE_SIZE;
-            }
-        });
+        canvas.setBackground(PITCH_DARK);
 
         layered.add(canvas, JLayeredPane.DEFAULT_LAYER);
         layered.add(world.hud.graphModal(), JLayeredPane.PALETTE_LAYER);
@@ -140,12 +135,57 @@ public class SimPanel extends JPanel {
             }
         });
 
+        world.startThread();
         updateTopBar();
         repaintTimer = new Timer(16, e -> {
             repaint();
             updateTopBar();
         });
         repaintTimer.start();
+    }
+
+    private void drawPitch(Graphics2D g) {
+        int W = FPSJFrame.WIDTH;
+        int H = FPSJFrame.HEIGHT - 40; // minus topbar approx
+        int stripeW = W / 10;
+
+        // Alternating green stripes
+        for (int i = 0; i < 10; i++) {
+            g.setColor(i % 2 == 0 ? PITCH_DARK : PITCH_LIGHT);
+            g.fillRect(i * stripeW, 0, stripeW, H);
+        }
+
+        g.setColor(LINE_COL);
+        g.setStroke(new BasicStroke(2f));
+
+        // Border
+        g.drawRect(40, 20, W - 80, H - 40);
+
+        // Halfway line
+        g.drawLine(W / 2, 20, W / 2, H - 20);
+
+        // Centre circle
+        int cr = 60;
+        g.drawOval(W / 2 - cr, H / 2 - cr, cr * 2, cr * 2);
+
+        // Centre spot
+        g.fillOval(W / 2 - 4, H / 2 - 4, 8, 8);
+
+        // Penalty areas
+        int paW = 120, paH = 200;
+        // Left
+        g.drawRect(40, H / 2 - paH / 2, paW, paH);
+        // Right
+        g.drawRect(W - 40 - paW, H / 2 - paH / 2, paW, paH);
+
+        // Goals
+        int gW = 20, gH = 100;
+        g.setColor(new Color(255, 255, 255, 220));
+        g.setStroke(new BasicStroke(3f));
+        // Left goal
+        g.drawRect(20, H / 2 - gH / 2, gW, gH);
+        // Right goal
+        g.drawRect(W - 40, H / 2 - gH / 2, gW, gH);
     }
 
     private void positionModal() {
@@ -168,7 +208,7 @@ public class SimPanel extends JPanel {
         statusLabel.setText(world.getName());
         pauseBtn.setText(paused ? "Resume" : "Pause");
         pauseBtn.setForeground(paused ? new Color(200, 160, 40) : new Color(80, 200, 80));
-        grassLabel.setText("Grass: " + world.getGrassPopulation());
+        scoreLabel.setText("Goals: " + world.getScore());
         timeLabel.setText("⏱  " + world.getElapsedTime());
         graphsBtn.setForeground(world.hud.isGraphVisible() ? new Color(80, 200, 80) : null);
     }
@@ -176,18 +216,6 @@ public class SimPanel extends JPanel {
     private void stopRepaint() {
         if (repaintTimer != null)
             repaintTimer.stop();
-    }
-
-    private void drawGrid(Graphics2D g) {
-        for (int row = 0; row < FPSJFrame.GRID_ROWS; row++) {
-            for (int col = 0; col < FPSJFrame.GRID_COLS; col++) {
-                int x = col * FPSJFrame.TILE_SIZE;
-                int y = row * FPSJFrame.TILE_SIZE;
-                g.setColor(new Color(20, 20, 20));
-                g.fillRect(x, y, FPSJFrame.TILE_SIZE, FPSJFrame.TILE_SIZE);
-                g.setColor(new Color(35, 35, 35));
-                g.drawRect(x, y, FPSJFrame.TILE_SIZE, FPSJFrame.TILE_SIZE);
-            }
-        }
+        world.pause();
     }
 }

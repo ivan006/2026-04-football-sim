@@ -2,8 +2,6 @@ package fpsjframe;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 public class World implements Runnable {
 
@@ -11,32 +9,29 @@ public class World implements Runnable {
         RUNNING, PAUSED
     }
 
-    // Identity
     private final String id;
     private String name;
     private final String createdAt;
 
-    // Config (set once at creation)
+    // Config kept for CreateWorldPanel compatibility (repurpose as team stats
+    // later)
     public final int attackPower;
     public final int defensePower;
     public final int movementPower;
     public final int sightRange;
 
-    // Status
     private volatile Status status = Status.PAUSED;
 
-    // Simulation state
-    private static final int GRID_COLS = FPSJFrame.GRID_COLS;
-    private static final int GRID_ROWS = FPSJFrame.GRID_ROWS;
     private static final long TICK_NS = 1_000_000_000L / 60;
 
-    final Tile[][] grid = new Tile[GRID_ROWS][GRID_COLS];
-    final List<Grass> grassList = new CopyOnWriteArrayList<>();
+    final Tile[][] grid = new Tile[FPSJFrame.GRID_ROWS][FPSJFrame.GRID_COLS];
+    final Player player = new Player();
+    final Ball ball = new Ball();
     final Hud hud = new Hud();
 
-    private boolean gridFull = false;
-    private int claimedCount = 0;
     private Thread simThread;
+    private long elapsedMs = 0;
+    private long lastResumeMs = 0;
 
     public World(String name, int attackPower, int defensePower,
             int movementPower, int sightRange) {
@@ -48,49 +43,15 @@ public class World implements Runnable {
         this.sightRange = sightRange;
         this.createdAt = LocalDateTime.now()
                 .format(DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm"));
-
         initGrid();
-        applyConfig();
-        spawnInitialGrass();
-    }
-
-    private void applyConfig() {
-        Grass.ATTACK_POWER = attackPower;
-        Grass.DEFENSE_POWER = defensePower;
-        Grass.MOVEMENT_POWER = movementPower;
-        Grass.SIGHT_RANGE = sightRange;
     }
 
     private void initGrid() {
-        for (int row = 0; row < GRID_ROWS; row++)
-            for (int col = 0; col < GRID_COLS; col++)
-                grid[row][col] = new Tile();
+        for (int r = 0; r < FPSJFrame.GRID_ROWS; r++)
+            for (int c = 0; c < FPSJFrame.GRID_COLS; c++)
+                grid[r][c] = new Tile();
     }
 
-    private void spawnInitialGrass() {
-        int centerRow = GRID_ROWS / 2;
-        int centerCol = GRID_COLS / 2;
-        grassList.add(new Grass(
-                centerCol * FPSJFrame.TILE_SIZE,
-                centerRow * FPSJFrame.TILE_SIZE,
-                centerRow, centerCol));
-    }
-
-    // Elapsed time — only accumulates while RUNNING
-    private long elapsedMs = 0;
-    private long lastResumeMs = 0;
-
-    public void onTileClaimed() {
-        claimedCount++;
-        if (claimedCount >= GRID_ROWS * GRID_COLS)
-            gridFull = true;
-    }
-
-    public boolean isGridFull() {
-        return gridFull;
-    }
-
-    // Start the background thread
     public void startThread() {
         lastResumeMs = System.currentTimeMillis();
         status = Status.RUNNING;
@@ -100,9 +61,8 @@ public class World implements Runnable {
     }
 
     public void pause() {
-        if (status == Status.RUNNING) {
+        if (status == Status.RUNNING)
             elapsedMs += System.currentTimeMillis() - lastResumeMs;
-        }
         status = Status.PAUSED;
     }
 
@@ -144,12 +104,8 @@ public class World implements Runnable {
     }
 
     private void tick() {
-        applyConfig(); // ensure config is applied for this world on its tick
-        for (Grass g : grassList)
-            g.tick(grid, grassList, this);
-        grassList.removeIf(Grass::isDead);
-        int pop = (int) grassList.stream().filter(gr -> !gr.isDying()).count();
-        hud.tick(pop);
+        player.tick(ball);
+        hud.tick(player.score);
     }
 
     // Getters
@@ -173,6 +129,10 @@ public class World implements Runnable {
         return status;
     }
 
+    public int getScore() {
+        return player.score;
+    }
+
     public String getElapsedTime() {
         long total = elapsedMs;
         if (status == Status.RUNNING)
@@ -183,7 +143,8 @@ public class World implements Runnable {
         return String.format("%02d:%02d:%02d", h, m, s);
     }
 
+    // Keep for Hud/graph compat
     public int getGrassPopulation() {
-        return (int) grassList.stream().filter(gr -> !gr.isDying()).count();
+        return player.score;
     }
 }
