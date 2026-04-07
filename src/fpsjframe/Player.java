@@ -115,8 +115,7 @@ public class Player {
         angle = (float) Math.atan2(dy, dx);
         hasBall = false;
         ball.kick(GOAL_X, GOAL_Y, PASS_POWER);
-        waitingForBall = true;
-        nextObjective(); // immediately move off PASS_TO_GOAL
+        nextObjective();
     }
 
     /** Called by World when the ball crosses the goal line. */
