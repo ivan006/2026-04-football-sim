@@ -75,7 +75,7 @@ public class Player {
     public void draw(Graphics2D g) {
         Graphics2D g2 = (Graphics2D) g.create();
         g2.translate((int) x, (int) y);
-        g2.rotate(angle + Math.PI / 2); // rotate to face direction
+        g2.rotate(angle - Math.PI / 2);
 
         // Shadow
         g2.setColor(new Color(0, 0, 0, 60));
@@ -96,6 +96,12 @@ public class Player {
         // right arm
         g2.drawLine(8, -2, 18, 4);
 
+        if (state == State.HAS_BALL) {
+            g2.setColor(Color.WHITE);
+            g2.fillOval(0, 14, 10, 10);
+            g2.setColor(Color.DARK_GRAY);
+            g2.drawOval(0, 14, 10, 10);
+        }
         g2.dispose();
     }
 }
