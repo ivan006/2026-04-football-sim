@@ -9,6 +9,7 @@ public class Player {
     public float x, y;
     public float angle = 0;
     public boolean hasBall = false;
+    boolean hasPassed = false;
 
     private Objective currentObjective;
     private final Queue<Objective> objectiveQueue = new LinkedList<>();
@@ -16,9 +17,9 @@ public class Player {
     private static final float SPEED_SEEK = 2.5f;
     private static final float SPEED_DRIBBLE = 1.8f;
     private static final float SPEED_RETURN = 2.0f;
-    private static final float PICKUP_DIST = 18f;
     private static final float PASS_RANGE = 120f;
     private static final float PASS_POWER = 14f;
+    private static final float PICKUP_DIST = 18f;
     private static final float ARRIVE_DIST = 10f;
 
     private static final float W = FPSJFrame.WIDTH;
@@ -30,39 +31,39 @@ public class Player {
     static final float GOAL_Y = H / 2f;
     static final float BALL_CENTER_X = W / 2f;
     static final float BALL_CENTER_Y = H / 2f;
-    boolean hasPassed = false;
+
     public int score = 0;
 
     public Player() {
         x = START_X;
         y = START_Y;
-        queueNormalCycle();
+        enqueueNormalCycle();
+        nextObjective();
     }
 
-    private void queueNormalCycle() {
+    private void enqueueNormalCycle() {
         objectiveQueue.add(Objective.OBTAIN_BALL);
         objectiveQueue.add(Objective.ADVANCE_TO_GOAL);
         objectiveQueue.add(Objective.PASS_TO_GOAL);
     }
 
-    private void queueAfterGoal() {
+    private void enqueueAfterGoal() {
         objectiveQueue.add(Objective.CARRY_TO_CENTER);
         objectiveQueue.add(Objective.KICKOFF_RESET);
-        objectiveQueue.add(Objective.OBTAIN_BALL);
-        objectiveQueue.add(Objective.ADVANCE_TO_GOAL);
-        objectiveQueue.add(Objective.PASS_TO_GOAL);
+        enqueueNormalCycle();
     }
 
     private void nextObjective() {
         currentObjective = objectiveQueue.poll();
     }
 
+    public Objective getCurrentObjective() {
+        return currentObjective;
+    }
+
     public void tick(Ball ball) {
         if (currentObjective == null)
-            nextObjective();
-        if (currentObjective == null)
             return;
-
         switch (currentObjective) {
             case OBTAIN_BALL -> obtainBall(ball);
             case ADVANCE_TO_GOAL -> advanceToGoal(ball);
@@ -74,7 +75,7 @@ public class Player {
 
     private void obtainBall(Ball ball) {
         if (ball.loose)
-            return; // wait for ball to stop
+            return;
         float dx = ball.x - x;
         float dy = ball.y - y;
         float dist = (float) Math.sqrt(dx * dx + dy * dy);
@@ -112,33 +113,39 @@ public class Player {
             ball.kick(GOAL_X, GOAL_Y, PASS_POWER);
             hasPassed = true;
         }
-        // wait here — World.tick() calls onGoal() or onPassFailed()
+        // wait — World.tick() calls onGoal() or onPassFailed()
     }
 
     public void onGoal(Ball ball) {
         score++;
         hasPassed = false;
-        ball.x = GOAL_X - 20f;
+        // place ball just inside pitch at goal mouth so carry looks natural
+        ball.x = GOAL_X - 25f;
         ball.y = GOAL_Y;
         ball.vx = 0;
         ball.vy = 0;
         ball.loose = false;
-        queueAfterGoal();
-        nextObjective();
+        hasBall = true;
+        enqueueAfterGoal();
+        nextObjective(); // moves to CARRY_TO_CENTER
     }
 
-    public void onPassFailed() {
+    public void onPassFailed(Ball ball) {
         hasPassed = false;
-        objectiveQueue.add(Objective.OBTAIN_BALL);
-        objectiveQueue.add(Objective.ADVANCE_TO_GOAL);
-        objectiveQueue.add(Objective.PASS_TO_GOAL);
-        nextObjective();
+        hasBall = false;
+        objectiveQueue.clear();
+        enqueueNormalCycle();
+        nextObjective(); // moves to OBTAIN_BALL
     }
 
     private void carryToCenter(Ball ball) {
         float dx = BALL_CENTER_X - x;
         float dy = BALL_CENTER_Y - y;
         float dist = (float) Math.sqrt(dx * dx + dy * dy);
+        // always keep ball on player while carrying
+        ball.x = x;
+        ball.y = y;
+        ball.loose = false;
         if (dist < ARRIVE_DIST) {
             hasBall = false;
             nextObjective();
@@ -147,8 +154,6 @@ public class Player {
         angle = (float) Math.atan2(dy, dx);
         x += (dx / dist) * SPEED_DRIBBLE;
         y += (dy / dist) * SPEED_DRIBBLE;
-        ball.x = x;
-        ball.y = y;
     }
 
     private void kickoffReset() {
@@ -164,10 +169,6 @@ public class Player {
         angle = (float) Math.atan2(dy, dx);
         x += (dx / dist) * SPEED_RETURN;
         y += (dy / dist) * SPEED_RETURN;
-    }
-
-    public Objective getCurrentObjective() {
-        return currentObjective;
     }
 
     public void draw(Graphics2D g) {

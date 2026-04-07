@@ -102,14 +102,15 @@ public class World implements Runnable {
 
     private void tick() {
         boolean goal = ball.tick();
+
         if (goal) {
             player.onGoal(ball);
-        } else if (ball.isStopped() &&
-                (player.getCurrentObjective() == Objective.PASS_TO_GOAL
-                        || player.getCurrentObjective() == null)
+        } else if (ball.isStopped()
+                && (player.getCurrentObjective() == Objective.PASS_TO_GOAL || player.getCurrentObjective() == null)
                 && player.hasPassed) {
-            player.onPassFailed();
+            player.onPassFailed(ball);
         }
+
         player.tick(ball);
         hud.tick(player.score);
     }
