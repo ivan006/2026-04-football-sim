@@ -10,6 +10,7 @@ public class Ball {
     private static final float FRICTION = 0.97f;
     private static final float STOP_THRESH = 0.1f;
     private static final float BOUNCE_DAMP = 0.6f;
+    public boolean possessed = false;
 
     // Must match SimPanel.drawPitch exactly
     // W = FPSJFrame.WIDTH, H = FPSJFrame.HEIGHT - 40
@@ -102,6 +103,8 @@ public class Ball {
     }
 
     public void draw(Graphics2D g) {
+        if (possessed)
+            return; // player draws it at their feet
         int r = 6;
         g.setColor(Color.WHITE);
         g.fillOval((int) (x - r), (int) (y - r), r * 2, r * 2);

@@ -135,7 +135,6 @@ public class Player {
             case FRIEND -> {
                 if (passTarget == null)
                     return;
-                // seek separation — move away from friend until MIN_PASS_DIST
                 float dx = x - passTarget.x;
                 float dy = y - passTarget.y;
                 float dist = (float) Math.sqrt(dx * dx + dy * dy);
@@ -148,6 +147,8 @@ public class Player {
                     x += (dx / dist) * SEP_SPEED;
                     y += (dy / dist) * SEP_SPEED;
                 }
+                ball.x = x; // ← add this
+                ball.y = y; // ← and this
                 return;
             }
             case CENTER -> {
