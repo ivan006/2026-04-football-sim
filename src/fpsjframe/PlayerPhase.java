@@ -5,9 +5,9 @@ public enum PlayerPhase {
     HAS_POSSESSION(PlayerActionSet.HAS_POSSESSION),
     SEEKS_POSSESSION(PlayerActionSet.SEEKS_POSSESSION);
 
-    public final PlayerActionSet playerActionSet;
+    public final PlayerActionSet actionSet;
 
-    PlayerPhase(PlayerActionSet playerActionSet) {
-        this.playerActionSet = playerActionSet;
+    PlayerPhase(PlayerActionSet actionSet) {
+        this.actionSet = actionSet;
     }
 }

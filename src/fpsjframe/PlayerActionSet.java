@@ -4,7 +4,7 @@ import java.util.Collections;
 import java.util.EnumSet;
 import java.util.Set;
 
-public class PlayerPlayerActionSet {
+public class PlayerActionSet {
 
     public final Set<PlayerActionSeekObject> seeks;
     public final Set<PlayerActionKickObject> kicks;

@@ -15,8 +15,8 @@ public class Player {
     public ActivityType activityType = ActivityType.TRAINING;
     public PlayerPhase phase = PlayerPhase.SEEKS_POSSESSION;
 
-    private SeekObject currentSeek = SeekObject.BALL;
-    private KickObject currentKick = null;
+    private PlayerActionSeekObject currentSeek = PlayerActionSeekObject.BALL;
+    private PlayerActionKickObject currentKick = null;
     private boolean kicking = false;
 
     public Player passTarget = null;
@@ -65,30 +65,31 @@ public class Player {
     }
 
     private void resolveAction(Ball ball) {
-        ActionSet allowed = phase.actionSet;
+        PlayerActionSet allowed = phase.actionSet;
         kicking = false;
         currentKick = null;
 
         switch (phase) {
             case HAS_POSSESSION -> {
-                if (scoredGoal && carryingBack && allowed.canSeek(SeekObject.CENTER)) {
-                    currentSeek = SeekObject.CENTER;
-                } else if (scoredGoal && resetting && allowed.canSeek(SeekObject.START)) {
-                    currentSeek = SeekObject.START;
-                } else if (!readyToPass && allowed.canSeek(SeekObject.FRIEND)) {
-                    currentSeek = SeekObject.FRIEND;
-                } else if (readyToPass && !hasPassed && allowed.canKick(KickObject.FRIEND)) {
+                if (scoredGoal && carryingBack && allowed.canSeek(PlayerActionSeekObject.CENTER)) {
+                    currentSeek = PlayerActionSeekObject.CENTER;
+                } else if (scoredGoal && resetting && allowed.canSeek(PlayerActionSeekObject.START)) {
+                    currentSeek = PlayerActionSeekObject.START;
+                } else if (!readyToPass && allowed.canSeek(PlayerActionSeekObject.FRIEND)) {
+                    currentSeek = PlayerActionSeekObject.FRIEND;
+                } else if (readyToPass && !hasPassed && allowed.canKick(PlayerActionKickObject.FRIEND)) {
                     kicking = true;
-                    currentKick = KickObject.FRIEND;
+                    currentKick = PlayerActionKickObject.FRIEND;
                 }
             }
             case SEEKS_POSSESSION -> {
-                if (resetting && allowed.canSeek(SeekObject.START)) {
-                    currentSeek = SeekObject.START;
-                } else if (passTarget != null && passTarget.hasBall && allowed.canSeek(SeekObject.RELATIVE_POS)) {
-                    currentSeek = SeekObject.RELATIVE_POS;
-                } else if (allowed.canSeek(SeekObject.BALL)) {
-                    currentSeek = SeekObject.BALL;
+                if (resetting && allowed.canSeek(PlayerActionSeekObject.START)) {
+                    currentSeek = PlayerActionSeekObject.START;
+                } else if (passTarget != null && passTarget.hasBall
+                        && allowed.canSeek(PlayerActionSeekObject.RELATIVE_POS)) {
+                    currentSeek = PlayerActionSeekObject.RELATIVE_POS;
+                } else if (allowed.canSeek(PlayerActionSeekObject.BALL)) {
+                    currentSeek = PlayerActionSeekObject.BALL;
                 }
             }
         }
@@ -101,7 +102,7 @@ public class Player {
             seek(ball, currentSeek);
     }
 
-    private void seek(Ball ball, SeekObject obj) {
+    private void seek(Ball ball, PlayerActionSeekObject obj) {
         float tx, ty, speed;
 
         switch (obj) {
@@ -168,14 +169,14 @@ public class Player {
         float dy = ty - y;
         float dist = (float) Math.sqrt(dx * dx + dy * dy);
 
-        if (obj == SeekObject.BALL && dist < PICKUP_DIST) {
+        if (obj == PlayerActionSeekObject.BALL && dist < PICKUP_DIST) {
             hasBall = true;
             ballOwner = this;
             hasPassed = false;
             ball.possessed = true;
             return;
         }
-        if (obj == SeekObject.CENTER && dist < ARRIVE_DIST) {
+        if (obj == PlayerActionSeekObject.CENTER && dist < ARRIVE_DIST) {
             hasBall = false;
             ballOwner = null;
             ball.possessed = false;
@@ -183,7 +184,7 @@ public class Player {
             resetting = true;
             return;
         }
-        if (obj == SeekObject.START && dist < ARRIVE_DIST) {
+        if (obj == PlayerActionSeekObject.START && dist < ARRIVE_DIST) {
             x = startX;
             y = startY;
             resetting = false;
@@ -197,7 +198,7 @@ public class Player {
         y += (dy / dist) * speed;
     }
 
-    private void kick(Ball ball, KickObject obj) {
+    private void kick(Ball ball, PlayerActionKickObject obj) {
         if (hasPassed)
             return;
         float tx, ty;
@@ -242,7 +243,7 @@ public class Player {
         ball.vx = 0;
         ball.vy = 0;
         ball.loose = false;
-        ball.possessed = true; // still carrying to center
+        ball.possessed = true;
     }
 
     public void onPassFailed() {
