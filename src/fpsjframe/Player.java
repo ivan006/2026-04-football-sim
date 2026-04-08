@@ -17,14 +17,18 @@ public class Player {
     // ── Hierarchy ─────────────────────────────────────────────────────────────
     public ActivityType activityType = ActivityType.TRAINING;
     public PlayerPhase phase = PlayerPhase.SEEKS_POSSESSION;
-    public Action currentAction = Action.MOVE_TO_BALL;
+
+    // Current resolved action
+    private SeekObject currentSeek = SeekObject.BALL;
+    private KickObject currentKick = null;
+    private boolean kicking = false;
 
     // ── Pass state ────────────────────────────────────────────────────────────
     public Player passTarget = null;
-    public boolean readyToPass = false; // separated enough to pass
+    public boolean readyToPass = false;
     boolean hasPassed = false;
 
-    // ── Post-goal carry state ─────────────────────────────────────────────────
+    // ── Post-goal state ───────────────────────────────────────────────────────
     private boolean scoredGoal = false;
     private boolean carryingBack = false;
     private boolean resetting = false;
@@ -36,7 +40,6 @@ public class Player {
     private static final float PASS_POWER = 4f;
     private static final float PICKUP_DIST = 18f;
     private static final float ARRIVE_DIST = 10f;
-    private static final float PASS_RANGE = 120f;
     private static final float MIN_PASS_DIST = 180f;
     private static final float SEP_SPEED = 1.2f;
 
@@ -63,182 +66,198 @@ public class Player {
     // ── Main tick ─────────────────────────────────────────────────────────────
     public void tick(Ball ball) {
         updatePhase();
-        updateAction();
-
-        switch (phase) {
-            case HAS_POSSESSION -> tickHasPossession(ball);
-            case SEEKS_POSSESSION -> tickSeeksPossession(ball);
-        }
+        resolveAction(ball);
+        executeAction(ball);
     }
 
-    /** Phase is purely derived from state — no assignment needed elsewhere. */
+    /** Phase derived purely from state. */
     private void updatePhase() {
         phase = hasBall ? PlayerPhase.HAS_POSSESSION : PlayerPhase.SEEKS_POSSESSION;
     }
 
     /**
-     * Action is derived from phase + contextual state.
-     * This is the decision layer — what should I do right now?
+     * Resolve what to seek or kick this tick.
+     * Only picks from what the current phase's ActionSet permits.
      */
-    private void updateAction() {
+    private void resolveAction(Ball ball) {
+        ActionSet allowed = phase.actionSet;
+        kicking = false;
+        currentKick = null;
+
         switch (phase) {
             case HAS_POSSESSION -> {
-                if (scoredGoal && carryingBack) {
-                    currentAction = Action.CARRY_TO_CENTER;
-                } else if (scoredGoal && resetting) {
-                    currentAction = Action.KICKOFF_RESET;
-                } else if (!readyToPass) {
-                    currentAction = Action.GET_READY_TO_PASS;
-                } else {
-                    currentAction = Action.PASS_TO_FRIEND;
+                if (scoredGoal && carryingBack && allowed.canSeek(SeekObject.CENTER)) {
+                    currentSeek = SeekObject.CENTER;
+                } else if (scoredGoal && resetting && allowed.canSeek(SeekObject.START)) {
+                    currentSeek = SeekObject.START;
+                } else if (!readyToPass && allowed.canSeek(SeekObject.FRIEND)) {
+                    currentSeek = SeekObject.FRIEND; // get separation
+                } else if (readyToPass && !hasPassed && allowed.canKick(KickObject.FRIEND)) {
+                    kicking = true;
+                    currentKick = KickObject.FRIEND;
                 }
             }
             case SEEKS_POSSESSION -> {
-                if (resetting) {
-                    currentAction = Action.KICKOFF_RESET;
-                } else if (passTarget != null && !passTarget.hasBall && !hasPassed) {
-                    // nobody has the ball — get separation while waiting
-                    currentAction = Action.GET_SEPARATION;
-                } else {
-                    currentAction = Action.MOVE_TO_BALL;
+                if (resetting && allowed.canSeek(SeekObject.START)) {
+                    currentSeek = SeekObject.START;
+                } else if (passTarget != null && passTarget.hasBall && allowed.canSeek(SeekObject.RELATIVE_POS)) {
+                    currentSeek = SeekObject.RELATIVE_POS; // get separation while other has ball
+                } else if (allowed.canSeek(SeekObject.BALL)) {
+                    currentSeek = SeekObject.BALL;
                 }
             }
         }
     }
 
-    // ── HAS_POSSESSION actions ────────────────────────────────────────────────
-    private void tickHasPossession(Ball ball) {
-        switch (currentAction) {
-            case GET_READY_TO_PASS -> getReadyToPass();
-            case PASS_TO_FRIEND -> passToFriend(ball);
-            case CARRY_TO_CENTER -> carryToCenter(ball);
-            case KICKOFF_RESET -> kickoffReset();
+    /** Execute the resolved seek or kick. */
+    private void executeAction(Ball ball) {
+        if (kicking) {
+            kick(ball, currentKick);
+        } else {
+            seek(ball, currentSeek);
+        }
+    }
+
+    // ── Core seek — one method, all targets ───────────────────────────────────
+    private void seek(Ball ball, SeekObject obj) {
+        float tx, ty, speed;
+
+        switch (obj) {
+            case BALL -> {
+                if (ball.loose)
+                    return;
+                if (ballOwner != null && ballOwner != this)
+                    return;
+                tx = ball.x;
+                ty = ball.y;
+                speed = SPEED_SEEK;
+            }
+            case FRIEND -> {
+                if (passTarget == null)
+                    return;
+                // seek separation — move away from friend until MIN_PASS_DIST
+                float dx = x - passTarget.x;
+                float dy = y - passTarget.y;
+                float dist = (float) Math.sqrt(dx * dx + dy * dy);
+                angle = (float) Math.atan2(-dy, -dx);
+                if (dist >= MIN_PASS_DIST) {
+                    readyToPass = true;
+                    return;
+                }
+                if (dist > 0) {
+                    x += (dx / dist) * SEP_SPEED;
+                    y += (dy / dist) * SEP_SPEED;
+                }
+                return;
+            }
+            case CENTER -> {
+                tx = BALL_CENTER_X;
+                ty = BALL_CENTER_Y;
+                speed = SPEED_DRIBBLE;
+                ball.x = x;
+                ball.y = y;
+                ball.loose = false;
+            }
+            case START -> {
+                tx = startX;
+                ty = startY;
+                speed = SPEED_RETURN;
+            }
+            case GOAL -> {
+                tx = GOAL_X;
+                ty = GOAL_Y;
+                speed = SPEED_DRIBBLE;
+                ball.x = x;
+                ball.y = y;
+            }
+            case RELATIVE_POS -> {
+                if (passTarget == null)
+                    return;
+                float dx = x - passTarget.x;
+                float dy = y - passTarget.y;
+                float dist = (float) Math.sqrt(dx * dx + dy * dy);
+                angle = (float) Math.atan2(-dy, -dx);
+                if (dist < MIN_PASS_DIST && dist > 0) {
+                    x += (dx / dist) * SEP_SPEED;
+                    y += (dy / dist) * SEP_SPEED;
+                }
+                return;
+            }
             default -> {
+                return;
             }
         }
-    }
 
-    // ── SEEKS_POSSESSION actions ──────────────────────────────────────────────
-    private void tickSeeksPossession(Ball ball) {
-        switch (currentAction) {
-            case MOVE_TO_BALL -> moveToBall(ball);
-            case GET_SEPARATION -> getSeparation();
-            case KICKOFF_RESET -> kickoffReset();
-            default -> {
-            }
-        }
-    }
-
-    // ── Action implementations ────────────────────────────────────────────────
-
-    private void getReadyToPass() {
-        if (passTarget == null) {
-            readyToPass = true;
-            return;
-        }
-        float dx = x - passTarget.x;
-        float dy = y - passTarget.y;
+        float dx = tx - x;
+        float dy = ty - y;
         float dist = (float) Math.sqrt(dx * dx + dy * dy);
-        angle = (float) Math.atan2(-dy, -dx); // face target
-        if (dist >= MIN_PASS_DIST) {
-            readyToPass = true;
-            return;
-        }
-        if (dist > 0) {
-            x += (dx / dist) * SEP_SPEED;
-            y += (dy / dist) * SEP_SPEED;
-        }
-    }
 
-    private void passToFriend(Ball ball) {
-        if (!hasPassed && passTarget != null) {
-            float dx = passTarget.x - x;
-            float dy = passTarget.y - y;
-            angle = (float) Math.atan2(dy, dx);
-            hasBall = false;
-            ballOwner = null;
-            readyToPass = false;
-            ball.kick(passTarget.x, passTarget.y, PASS_POWER);
-            hasPassed = true;
-        }
-    }
-
-    private void moveToBall(Ball ball) {
-        if (ball.loose)
-            return;
-        if (ballOwner != null && ballOwner != this)
-            return;
-        float dx = ball.x - x;
-        float dy = ball.y - y;
-        float dist = (float) Math.sqrt(dx * dx + dy * dy);
-        if (dist < PICKUP_DIST) {
+        if (obj == SeekObject.BALL && dist < PICKUP_DIST) {
             hasBall = true;
             ballOwner = this;
             hasPassed = false;
             return;
         }
-        angle = (float) Math.atan2(dy, dx);
-        x += (dx / dist) * SPEED_SEEK;
-        y += (dy / dist) * SPEED_SEEK;
-    }
 
-    private void getSeparation() {
-        if (passTarget == null)
-            return;
-        float dx = x - passTarget.x;
-        float dy = y - passTarget.y;
-        float dist = (float) Math.sqrt(dx * dx + dy * dy);
-        angle = (float) Math.atan2(-dy, -dx);
-        if (dist < MIN_PASS_DIST && dist > 0) {
-            x += (dx / dist) * SEP_SPEED;
-            y += (dy / dist) * SEP_SPEED;
-        }
-    }
-
-    private void carryToCenter(Ball ball) {
-        float dx = BALL_CENTER_X - x;
-        float dy = BALL_CENTER_Y - y;
-        float dist = (float) Math.sqrt(dx * dx + dy * dy);
-        ball.x = x;
-        ball.y = y;
-        ball.loose = false;
-        if (dist < ARRIVE_DIST) {
+        if (obj == SeekObject.CENTER && dist < ARRIVE_DIST) {
             hasBall = false;
             ballOwner = null;
             carryingBack = false;
             resetting = true;
             return;
         }
-        angle = (float) Math.atan2(dy, dx);
-        x += (dx / dist) * SPEED_DRIBBLE;
-        y += (dy / dist) * SPEED_DRIBBLE;
-    }
 
-    private void kickoffReset() {
-        float dx = startX - x;
-        float dy = startY - y;
-        float dist = (float) Math.sqrt(dx * dx + dy * dy);
-        if (dist < ARRIVE_DIST) {
+        if (obj == SeekObject.START && dist < ARRIVE_DIST) {
             x = startX;
             y = startY;
             resetting = false;
             scoredGoal = false;
             return;
         }
+
+        if (dist == 0)
+            return;
         angle = (float) Math.atan2(dy, dx);
-        x += (dx / dist) * SPEED_RETURN;
-        y += (dy / dist) * SPEED_RETURN;
+        x += (dx / dist) * speed;
+        y += (dy / dist) * speed;
+    }
+
+    // ── Core kick — one method, all targets ───────────────────────────────────
+    private void kick(Ball ball, KickObject obj) {
+        if (hasPassed)
+            return;
+        float tx, ty;
+        switch (obj) {
+            case FRIEND -> {
+                if (passTarget == null)
+                    return;
+                tx = passTarget.x;
+                ty = passTarget.y;
+            }
+            case GOAL -> {
+                tx = GOAL_X;
+                ty = GOAL_Y;
+            }
+            default -> {
+                return;
+            }
+        }
+        float dx = tx - x;
+        float dy = ty - y;
+        angle = (float) Math.atan2(dy, dx);
+        hasBall = false;
+        ballOwner = null;
+        readyToPass = false;
+        ball.kick(tx, ty, PASS_POWER);
+        hasPassed = true;
     }
 
     // ── External events ───────────────────────────────────────────────────────
-
-    /** Called by World when this player's pass reaches the friend. */
     public void onPassComplete() {
         hasPassed = false;
         readyToPass = false;
     }
 
-    /** Called by World when ball crossed goal line. */
     public void onGoal(Ball ball) {
         score++;
         hasPassed = false;
@@ -249,11 +268,8 @@ public class Player {
         ball.vx = 0;
         ball.vy = 0;
         ball.loose = false;
-        // player walks to ball then carries it — moveToBall handles pickup
-        // then updateAction will see scoredGoal+carryingBack → CARRY_TO_CENTER
     }
 
-    /** Called by World when pass stopped short. */
     public void onPassFailed() {
         hasPassed = false;
         readyToPass = false;
