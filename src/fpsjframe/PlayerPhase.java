@@ -2,12 +2,12 @@ package fpsjframe;
 
 public enum PlayerPhase {
 
-    HAS_POSSESSION(ActionSet.HAS_POSSESSION),
-    SEEKS_POSSESSION(ActionSet.SEEKS_POSSESSION);
+    HAS_POSSESSION(PlayerActionSet.HAS_POSSESSION),
+    SEEKS_POSSESSION(PlayerActionSet.SEEKS_POSSESSION);
 
-    public final ActionSet actionSet;
+    public final PlayerActionSet playerActionSet;
 
-    PlayerPhase(ActionSet actionSet) {
-        this.actionSet = actionSet;
+    PlayerPhase(PlayerActionSet playerActionSet) {
+        this.playerActionSet = playerActionSet;
     }
 }

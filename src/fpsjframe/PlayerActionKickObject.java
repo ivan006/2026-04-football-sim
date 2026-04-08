@@ -1,6 +1,6 @@
 package fpsjframe;
 
-public enum KickObject {
+public enum PlayerActionKickObject {
     FRIEND,
     GOAL
 }

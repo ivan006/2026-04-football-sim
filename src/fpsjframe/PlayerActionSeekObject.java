@@ -1,6 +1,6 @@
 package fpsjframe;
 
-public enum SeekObject {
+public enum PlayerActionSeekObject {
     BALL,
     FRIEND,
     GOAL,
