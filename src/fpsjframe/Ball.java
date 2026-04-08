@@ -6,14 +6,13 @@ public class Ball {
 
     public float x, y;
     public float vx, vy;
+    public boolean loose = false;
+    public boolean possessed = false;
 
     private static final float FRICTION = 0.97f;
     private static final float STOP_THRESH = 0.1f;
     private static final float BOUNCE_DAMP = 0.6f;
-    public boolean possessed = false;
 
-    // Must match SimPanel.drawPitch exactly
-    // W = FPSJFrame.WIDTH, H = FPSJFrame.HEIGHT - 40
     private static final float W = FPSJFrame.WIDTH;
     private static final float H = FPSJFrame.HEIGHT - 40;
     private static final float LEFT = 40f;
@@ -21,12 +20,9 @@ public class Ball {
     private static final float TOP = 20f;
     private static final float BOTTOM = H - 20f;
 
-    // Right goal (matches: drawRect(W-40, H/2-50, 20, 100))
     static final float GOAL_LINE_X = RIGHT;
     static final float GOAL_TOP_Y = H / 2f - 50f;
     static final float GOAL_BOT_Y = H / 2f + 50f;
-
-    public boolean loose = false;
 
     public Ball() {
         reset();
@@ -38,6 +34,7 @@ public class Ball {
         vx = 0;
         vy = 0;
         loose = false;
+        possessed = false;
     }
 
     public void kick(float targetX, float targetY, float power) {
@@ -49,21 +46,17 @@ public class Ball {
         vx = (dx / dist) * power;
         vy = (dy / dist) * power;
         loose = true;
+        possessed = false;
     }
 
-    /**
-     * Returns true if ball crossed the goal line (goal scored).
-     */
     public boolean tick() {
         if (!loose)
             return false;
-
         x += vx;
         y += vy;
         vx *= FRICTION;
         vy *= FRICTION;
 
-        // Goal check before right wall bounce
         if (x >= GOAL_LINE_X && y >= GOAL_TOP_Y && y <= GOAL_BOT_Y) {
             loose = false;
             vx = 0;
@@ -71,7 +64,6 @@ public class Ball {
             return true;
         }
 
-        // Boundary bouncing
         if (x <= LEFT) {
             x = LEFT;
             vx = Math.abs(vx) * BOUNCE_DAMP;
@@ -94,7 +86,6 @@ public class Ball {
             vy = 0;
             loose = false;
         }
-
         return false;
     }
 
@@ -104,7 +95,7 @@ public class Ball {
 
     public void draw(Graphics2D g) {
         if (possessed)
-            return; // player draws it at their feet
+            return; // owner draws it at their feet
         int r = 6;
         g.setColor(Color.WHITE);
         g.fillOval((int) (x - r), (int) (y - r), r * 2, r * 2);

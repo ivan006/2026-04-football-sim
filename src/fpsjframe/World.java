@@ -121,13 +121,21 @@ public class World implements Runnable {
             checkPassArrival(player1, player2);
             checkPassArrival(player2, player1);
 
-            // Ball stopped with no owner — pass failed
             if (ball.isStopped() && !player1.hasBall && !player2.hasBall) {
                 if (player1.hasPassed)
                     player1.onPassFailed();
                 else if (player2.hasPassed)
                     player2.onPassFailed();
             }
+        }
+
+        // Ball always follows its owner
+        if (player1.hasBall) {
+            ball.x = player1.x;
+            ball.y = player1.y;
+        } else if (player2.hasBall) {
+            ball.x = player2.x;
+            ball.y = player2.y;
         }
 
         player1.tick(ball);
@@ -153,7 +161,6 @@ public class World implements Runnable {
             passer.hasPassed = false;
             Player.ballOwner = null;
             passer.onPassComplete();
-            // receiver's SEEKS_POSSESSION → MOVE_TO_BALL will pick it up naturally
         }
     }
 

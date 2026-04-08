@@ -4,36 +4,29 @@ import java.awt.*;
 
 public class Player {
 
-    // ── Identity ──────────────────────────────────────────────────────────────
     private final Color bodyColor;
     final float startX, startY;
 
-    // ── State ─────────────────────────────────────────────────────────────────
     public float x, y;
     public float angle = 0;
     public boolean hasBall = false;
     public static Player ballOwner = null;
 
-    // ── Hierarchy ─────────────────────────────────────────────────────────────
     public ActivityType activityType = ActivityType.TRAINING;
     public PlayerPhase phase = PlayerPhase.SEEKS_POSSESSION;
 
-    // Current resolved action
     private SeekObject currentSeek = SeekObject.BALL;
     private KickObject currentKick = null;
     private boolean kicking = false;
 
-    // ── Pass state ────────────────────────────────────────────────────────────
     public Player passTarget = null;
     public boolean readyToPass = false;
     boolean hasPassed = false;
 
-    // ── Post-goal state ───────────────────────────────────────────────────────
     private boolean scoredGoal = false;
     private boolean carryingBack = false;
     private boolean resetting = false;
 
-    // ── Tuning ────────────────────────────────────────────────────────────────
     private static final float SPEED_SEEK = 2.5f;
     private static final float SPEED_DRIBBLE = 1.8f;
     private static final float SPEED_RETURN = 2.0f;
@@ -43,7 +36,6 @@ public class Player {
     private static final float MIN_PASS_DIST = 180f;
     private static final float SEP_SPEED = 1.2f;
 
-    // ── Pitch constants ───────────────────────────────────────────────────────
     private static final float W = FPSJFrame.WIDTH;
     private static final float H = FPSJFrame.HEIGHT - 40;
 
@@ -54,7 +46,6 @@ public class Player {
 
     public int score = 0;
 
-    // ── Constructor ───────────────────────────────────────────────────────────
     public Player(float startX, float startY, Color bodyColor) {
         this.startX = startX;
         this.startY = startY;
@@ -63,22 +54,16 @@ public class Player {
         y = startY;
     }
 
-    // ── Main tick ─────────────────────────────────────────────────────────────
     public void tick(Ball ball) {
         updatePhase();
         resolveAction(ball);
         executeAction(ball);
     }
 
-    /** Phase derived purely from state. */
     private void updatePhase() {
         phase = hasBall ? PlayerPhase.HAS_POSSESSION : PlayerPhase.SEEKS_POSSESSION;
     }
 
-    /**
-     * Resolve what to seek or kick this tick.
-     * Only picks from what the current phase's ActionSet permits.
-     */
     private void resolveAction(Ball ball) {
         ActionSet allowed = phase.actionSet;
         kicking = false;
@@ -91,7 +76,7 @@ public class Player {
                 } else if (scoredGoal && resetting && allowed.canSeek(SeekObject.START)) {
                     currentSeek = SeekObject.START;
                 } else if (!readyToPass && allowed.canSeek(SeekObject.FRIEND)) {
-                    currentSeek = SeekObject.FRIEND; // get separation
+                    currentSeek = SeekObject.FRIEND;
                 } else if (readyToPass && !hasPassed && allowed.canKick(KickObject.FRIEND)) {
                     kicking = true;
                     currentKick = KickObject.FRIEND;
@@ -101,7 +86,7 @@ public class Player {
                 if (resetting && allowed.canSeek(SeekObject.START)) {
                     currentSeek = SeekObject.START;
                 } else if (passTarget != null && passTarget.hasBall && allowed.canSeek(SeekObject.RELATIVE_POS)) {
-                    currentSeek = SeekObject.RELATIVE_POS; // get separation while other has ball
+                    currentSeek = SeekObject.RELATIVE_POS;
                 } else if (allowed.canSeek(SeekObject.BALL)) {
                     currentSeek = SeekObject.BALL;
                 }
@@ -109,16 +94,13 @@ public class Player {
         }
     }
 
-    /** Execute the resolved seek or kick. */
     private void executeAction(Ball ball) {
-        if (kicking) {
+        if (kicking)
             kick(ball, currentKick);
-        } else {
+        else
             seek(ball, currentSeek);
-        }
     }
 
-    // ── Core seek — one method, all targets ───────────────────────────────────
     private void seek(Ball ball, SeekObject obj) {
         float tx, ty, speed;
 
@@ -147,17 +129,12 @@ public class Player {
                     x += (dx / dist) * SEP_SPEED;
                     y += (dy / dist) * SEP_SPEED;
                 }
-                ball.x = x; // ← add this
-                ball.y = y; // ← and this
                 return;
             }
             case CENTER -> {
                 tx = BALL_CENTER_X;
                 ty = BALL_CENTER_Y;
                 speed = SPEED_DRIBBLE;
-                ball.x = x;
-                ball.y = y;
-                ball.loose = false;
             }
             case START -> {
                 tx = startX;
@@ -168,8 +145,6 @@ public class Player {
                 tx = GOAL_X;
                 ty = GOAL_Y;
                 speed = SPEED_DRIBBLE;
-                ball.x = x;
-                ball.y = y;
             }
             case RELATIVE_POS -> {
                 if (passTarget == null)
@@ -197,17 +172,17 @@ public class Player {
             hasBall = true;
             ballOwner = this;
             hasPassed = false;
+            ball.possessed = true;
             return;
         }
-
         if (obj == SeekObject.CENTER && dist < ARRIVE_DIST) {
             hasBall = false;
             ballOwner = null;
+            ball.possessed = false;
             carryingBack = false;
             resetting = true;
             return;
         }
-
         if (obj == SeekObject.START && dist < ARRIVE_DIST) {
             x = startX;
             y = startY;
@@ -215,7 +190,6 @@ public class Player {
             scoredGoal = false;
             return;
         }
-
         if (dist == 0)
             return;
         angle = (float) Math.atan2(dy, dx);
@@ -223,7 +197,6 @@ public class Player {
         y += (dy / dist) * speed;
     }
 
-    // ── Core kick — one method, all targets ───────────────────────────────────
     private void kick(Ball ball, KickObject obj) {
         if (hasPassed)
             return;
@@ -249,11 +222,11 @@ public class Player {
         hasBall = false;
         ballOwner = null;
         readyToPass = false;
+        ball.possessed = false;
         ball.kick(tx, ty, PASS_POWER);
         hasPassed = true;
     }
 
-    // ── External events ───────────────────────────────────────────────────────
     public void onPassComplete() {
         hasPassed = false;
         readyToPass = false;
@@ -269,6 +242,7 @@ public class Player {
         ball.vx = 0;
         ball.vy = 0;
         ball.loose = false;
+        ball.possessed = true; // still carrying to center
     }
 
     public void onPassFailed() {
@@ -277,7 +251,6 @@ public class Player {
         ballOwner = null;
     }
 
-    // ── Rendering ─────────────────────────────────────────────────────────────
     public void draw(Graphics2D g) {
         Graphics2D g2 = (Graphics2D) g.create();
         g2.translate((int) x, (int) y);
