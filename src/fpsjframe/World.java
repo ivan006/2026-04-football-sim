@@ -50,18 +50,6 @@ public class World implements Runnable {
 
         player1.passTarget = player2;
         player2.passTarget = player1;
-
-        // Player 1 has ball, gets ready then passes
-        // Player 2 gets ready to receive then obtains ball
-        player1.setObjectives(
-                Objective.OBTAIN_BALL,
-                Objective.GET_READY_TO_PASS,
-                Objective.PASS_TO_FRIEND);
-        player2.setObjectives(
-                Objective.GET_READY_TO_RECEIVE,
-                Objective.OBTAIN_BALL,
-                Objective.GET_READY_TO_PASS,
-                Objective.PASS_TO_FRIEND);
     }
 
     private void initGrid() {
@@ -133,11 +121,12 @@ public class World implements Runnable {
             checkPassArrival(player1, player2);
             checkPassArrival(player2, player1);
 
+            // Ball stopped with no owner — pass failed
             if (ball.isStopped() && !player1.hasBall && !player2.hasBall) {
                 if (player1.hasPassed)
-                    player1.onPassFailed(ball);
+                    player1.onPassFailed();
                 else if (player2.hasPassed)
-                    player2.onPassFailed(ball);
+                    player2.onPassFailed();
             }
         }
 
@@ -162,13 +151,9 @@ public class World implements Runnable {
             ball.y = receiver.y;
             passer.hasBall = false;
             passer.hasPassed = false;
+            Player.ballOwner = null;
             passer.onPassComplete();
-            // queue the receiver's next cycle
-            receiver.objectiveQueue.clear();
-            receiver.objectiveQueue.add(Objective.OBTAIN_BALL);
-            receiver.objectiveQueue.add(Objective.GET_READY_TO_PASS);
-            receiver.objectiveQueue.add(Objective.PASS_TO_FRIEND);
-            receiver.currentObjective = null;
+            // receiver's SEEKS_POSSESSION → MOVE_TO_BALL will pick it up naturally
         }
     }
 

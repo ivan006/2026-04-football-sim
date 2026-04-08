@@ -1,21 +1,35 @@
 package fpsjframe;
 
 import java.awt.*;
-import java.util.LinkedList;
-import java.util.Queue;
 
 public class Player {
 
+    // ── Identity ──────────────────────────────────────────────────────────────
+    private final Color bodyColor;
+    final float startX, startY;
+
+    // ── State ─────────────────────────────────────────────────────────────────
     public float x, y;
     public float angle = 0;
     public boolean hasBall = false;
+    public static Player ballOwner = null;
+
+    // ── Hierarchy ─────────────────────────────────────────────────────────────
+    public ActivityType activityType = ActivityType.TRAINING;
+    public PlayerPhase phase = PlayerPhase.SEEKS_POSSESSION;
+    public Action currentAction = Action.MOVE_TO_BALL;
+
+    // ── Pass state ────────────────────────────────────────────────────────────
+    public Player passTarget = null;
+    public boolean readyToPass = false; // separated enough to pass
     boolean hasPassed = false;
 
-    Objective currentObjective;
-    final Queue<Objective> objectiveQueue = new LinkedList<>();
+    // ── Post-goal carry state ─────────────────────────────────────────────────
+    private boolean scoredGoal = false;
+    private boolean carryingBack = false;
+    private boolean resetting = false;
 
-    public Player passTarget = null;
-
+    // ── Tuning ────────────────────────────────────────────────────────────────
     private static final float SPEED_SEEK = 2.5f;
     private static final float SPEED_DRIBBLE = 1.8f;
     private static final float SPEED_RETURN = 2.0f;
@@ -23,26 +37,21 @@ public class Player {
     private static final float PICKUP_DIST = 18f;
     private static final float ARRIVE_DIST = 10f;
     private static final float PASS_RANGE = 120f;
-    public static Player ballOwner = null;
-    // Separation
-    private static final float MIN_PASS_DIST = 180f; // must be this far apart to pass
-    private static final float IDEAL_DIST = 220f; // target separation distance
+    private static final float MIN_PASS_DIST = 180f;
     private static final float SEP_SPEED = 1.2f;
 
+    // ── Pitch constants ───────────────────────────────────────────────────────
     private static final float W = FPSJFrame.WIDTH;
     private static final float H = FPSJFrame.HEIGHT - 40;
-
-    final float startX;
-    final float startY;
 
     static final float GOAL_X = W - 40f;
     static final float GOAL_Y = H / 2f;
     static final float BALL_CENTER_X = W / 2f;
     static final float BALL_CENTER_Y = H / 2f;
 
-    private final Color bodyColor;
     public int score = 0;
 
+    // ── Constructor ───────────────────────────────────────────────────────────
     public Player(float startX, float startY, Color bodyColor) {
         this.startX = startX;
         this.startY = startY;
@@ -51,79 +60,93 @@ public class Player {
         y = startY;
     }
 
-    public void setObjectives(Objective... objectives) {
-        objectiveQueue.clear();
-        for (Objective o : objectives)
-            objectiveQueue.add(o);
-        currentObjective = null;
-    }
-
-    void nextObjective() {
-        currentObjective = objectiveQueue.poll();
-    }
-
-    public Objective getCurrentObjective() {
-        return currentObjective;
-    }
-
+    // ── Main tick ─────────────────────────────────────────────────────────────
     public void tick(Ball ball) {
-        if (currentObjective == null)
-            nextObjective();
-        if (currentObjective == null)
-            return;
-        switch (currentObjective) {
-            case OBTAIN_BALL -> obtainBall(ball);
+        updatePhase();
+        updateAction();
+
+        switch (phase) {
+            case HAS_POSSESSION -> tickHasPossession(ball);
+            case SEEKS_POSSESSION -> tickSeeksPossession(ball);
+        }
+    }
+
+    /** Phase is purely derived from state — no assignment needed elsewhere. */
+    private void updatePhase() {
+        phase = hasBall ? PlayerPhase.HAS_POSSESSION : PlayerPhase.SEEKS_POSSESSION;
+    }
+
+    /**
+     * Action is derived from phase + contextual state.
+     * This is the decision layer — what should I do right now?
+     */
+    private void updateAction() {
+        switch (phase) {
+            case HAS_POSSESSION -> {
+                if (scoredGoal && carryingBack) {
+                    currentAction = Action.CARRY_TO_CENTER;
+                } else if (scoredGoal && resetting) {
+                    currentAction = Action.KICKOFF_RESET;
+                } else if (!readyToPass) {
+                    currentAction = Action.GET_READY_TO_PASS;
+                } else {
+                    currentAction = Action.PASS_TO_FRIEND;
+                }
+            }
+            case SEEKS_POSSESSION -> {
+                if (resetting) {
+                    currentAction = Action.KICKOFF_RESET;
+                } else if (passTarget != null && !passTarget.hasBall && !hasPassed) {
+                    // nobody has the ball — get separation while waiting
+                    currentAction = Action.GET_SEPARATION;
+                } else {
+                    currentAction = Action.MOVE_TO_BALL;
+                }
+            }
+        }
+    }
+
+    // ── HAS_POSSESSION actions ────────────────────────────────────────────────
+    private void tickHasPossession(Ball ball) {
+        switch (currentAction) {
             case GET_READY_TO_PASS -> getReadyToPass();
             case PASS_TO_FRIEND -> passToFriend(ball);
-            case GET_READY_TO_RECEIVE -> getReadyToReceive();
-            case ADVANCE_TO_GOAL -> advanceToGoal(ball);
-            case PASS_TO_GOAL -> passToGoal(ball);
             case CARRY_TO_CENTER -> carryToCenter(ball);
             case KICKOFF_RESET -> kickoffReset();
+            default -> {
+            }
         }
     }
 
-    private void obtainBall(Ball ball) {
-        if (ball.loose)
-            return;
-        if (ballOwner != null && ballOwner != this)
-            return; // someone else has it
-        float dx = ball.x - x;
-        float dy = ball.y - y;
-        float dist = (float) Math.sqrt(dx * dx + dy * dy);
-        if (dist < PICKUP_DIST) {
-            hasBall = true;
-            ballOwner = this;
-            nextObjective();
-            return;
+    // ── SEEKS_POSSESSION actions ──────────────────────────────────────────────
+    private void tickSeeksPossession(Ball ball) {
+        switch (currentAction) {
+            case MOVE_TO_BALL -> moveToBall(ball);
+            case GET_SEPARATION -> getSeparation();
+            case KICKOFF_RESET -> kickoffReset();
+            default -> {
+            }
         }
-        angle = (float) Math.atan2(dy, dx);
-        x += (dx / dist) * SPEED_SEEK;
-        y += (dy / dist) * SPEED_SEEK;
     }
+
+    // ── Action implementations ────────────────────────────────────────────────
 
     private void getReadyToPass() {
         if (passTarget == null) {
-            nextObjective();
+            readyToPass = true;
             return;
         }
         float dx = x - passTarget.x;
         float dy = y - passTarget.y;
         float dist = (float) Math.sqrt(dx * dx + dy * dy);
-        // face the target while moving
-        angle = (float) Math.atan2(-dy, -dx);
+        angle = (float) Math.atan2(-dy, -dx); // face target
         if (dist >= MIN_PASS_DIST) {
-            nextObjective(); // far enough — ready to pass
+            readyToPass = true;
             return;
         }
-        // move away from target to gain separation
         if (dist > 0) {
             x += (dx / dist) * SEP_SPEED;
             y += (dy / dist) * SEP_SPEED;
-        }
-        // keep ball glued while repositioning
-        if (hasBall) {
-            // carried silently
         }
     }
 
@@ -133,92 +156,43 @@ public class Player {
             float dy = passTarget.y - y;
             angle = (float) Math.atan2(dy, dx);
             hasBall = false;
-            ballOwner = null; // ← here
+            ballOwner = null;
+            readyToPass = false;
             ball.kick(passTarget.x, passTarget.y, PASS_POWER);
             hasPassed = true;
         }
     }
 
-    private void getReadyToReceive() {
-        if (passTarget == null) {
-            nextObjective();
+    private void moveToBall(Ball ball) {
+        if (ball.loose)
             return;
-        }
-        float dx = x - passTarget.x;
-        float dy = y - passTarget.y;
-        float dist = (float) Math.sqrt(dx * dx + dy * dy);
-        // face the passer
-        angle = (float) Math.atan2(-dy, -dx);
-        if (dist >= MIN_PASS_DIST) {
-            nextObjective(); // in position — wait for ball
+        if (ballOwner != null && ballOwner != this)
             return;
-        }
-        if (dist > 0) {
-            x += (dx / dist) * SEP_SPEED;
-            y += (dy / dist) * SEP_SPEED;
-        }
-    }
-
-    private void advanceToGoal(Ball ball) {
-        float dx = GOAL_X - x;
-        float dy = GOAL_Y - y;
+        float dx = ball.x - x;
+        float dy = ball.y - y;
         float dist = (float) Math.sqrt(dx * dx + dy * dy);
-        if (dist < PASS_RANGE) {
-            nextObjective();
+        if (dist < PICKUP_DIST) {
+            hasBall = true;
+            ballOwner = this;
+            hasPassed = false;
             return;
         }
         angle = (float) Math.atan2(dy, dx);
-        x += (dx / dist) * SPEED_DRIBBLE;
-        y += (dy / dist) * SPEED_DRIBBLE;
-        ball.x = x;
-        ball.y = y;
+        x += (dx / dist) * SPEED_SEEK;
+        y += (dy / dist) * SPEED_SEEK;
     }
 
-    private void passToGoal(Ball ball) {
-        if (!hasPassed) {
-            float dx = GOAL_X - x;
-            float dy = GOAL_Y - y;
-            angle = (float) Math.atan2(dy, dx);
-            hasBall = false;
-            ballOwner = null; // ← here
-            ball.kick(GOAL_X, GOAL_Y, PASS_POWER);
-            hasPassed = true;
+    private void getSeparation() {
+        if (passTarget == null)
+            return;
+        float dx = x - passTarget.x;
+        float dy = y - passTarget.y;
+        float dist = (float) Math.sqrt(dx * dx + dy * dy);
+        angle = (float) Math.atan2(-dy, -dx);
+        if (dist < MIN_PASS_DIST && dist > 0) {
+            x += (dx / dist) * SEP_SPEED;
+            y += (dy / dist) * SEP_SPEED;
         }
-    }
-
-    public void onPassComplete() {
-        hasPassed = false;
-        // re-queue pass cycle
-        objectiveQueue.clear();
-        objectiveQueue.add(Objective.GET_READY_TO_PASS);
-        objectiveQueue.add(Objective.PASS_TO_FRIEND);
-        currentObjective = null;
-    }
-
-    public void onGoal(Ball ball) {
-        score++;
-        hasPassed = false;
-        ball.vx = 0;
-        ball.vy = 0;
-        ball.loose = false;
-        objectiveQueue.clear();
-        objectiveQueue.add(Objective.OBTAIN_BALL);
-        objectiveQueue.add(Objective.CARRY_TO_CENTER);
-        objectiveQueue.add(Objective.KICKOFF_RESET);
-        objectiveQueue.add(Objective.OBTAIN_BALL);
-        objectiveQueue.add(Objective.ADVANCE_TO_GOAL);
-        objectiveQueue.add(Objective.PASS_TO_GOAL);
-        currentObjective = null;
-    }
-
-    public void onPassFailed(Ball ball) {
-        hasPassed = false;
-        hasBall = false;
-        objectiveQueue.clear();
-        objectiveQueue.add(Objective.OBTAIN_BALL);
-        objectiveQueue.add(Objective.GET_READY_TO_PASS);
-        objectiveQueue.add(Objective.PASS_TO_FRIEND);
-        currentObjective = null;
     }
 
     private void carryToCenter(Ball ball) {
@@ -230,7 +204,9 @@ public class Player {
         ball.loose = false;
         if (dist < ARRIVE_DIST) {
             hasBall = false;
-            nextObjective();
+            ballOwner = null;
+            carryingBack = false;
+            resetting = true;
             return;
         }
         angle = (float) Math.atan2(dy, dx);
@@ -245,7 +221,8 @@ public class Player {
         if (dist < ARRIVE_DIST) {
             x = startX;
             y = startY;
-            nextObjective();
+            resetting = false;
+            scoredGoal = false;
             return;
         }
         angle = (float) Math.atan2(dy, dx);
@@ -253,6 +230,37 @@ public class Player {
         y += (dy / dist) * SPEED_RETURN;
     }
 
+    // ── External events ───────────────────────────────────────────────────────
+
+    /** Called by World when this player's pass reaches the friend. */
+    public void onPassComplete() {
+        hasPassed = false;
+        readyToPass = false;
+    }
+
+    /** Called by World when ball crossed goal line. */
+    public void onGoal(Ball ball) {
+        score++;
+        hasPassed = false;
+        readyToPass = false;
+        scoredGoal = true;
+        carryingBack = true;
+        resetting = false;
+        ball.vx = 0;
+        ball.vy = 0;
+        ball.loose = false;
+        // player walks to ball then carries it — moveToBall handles pickup
+        // then updateAction will see scoredGoal+carryingBack → CARRY_TO_CENTER
+    }
+
+    /** Called by World when pass stopped short. */
+    public void onPassFailed() {
+        hasPassed = false;
+        readyToPass = false;
+        ballOwner = null;
+    }
+
+    // ── Rendering ─────────────────────────────────────────────────────────────
     public void draw(Graphics2D g) {
         Graphics2D g2 = (Graphics2D) g.create();
         g2.translate((int) x, (int) y);
